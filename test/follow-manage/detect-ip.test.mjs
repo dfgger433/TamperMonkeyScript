@@ -263,6 +263,94 @@ test('响应缺少 card 时按失败处理，不写成「无 IP」', async () =>
   assert.match(document.querySelector('#bm-st').textContent, /失败 1/)
 })
 
+test('授权期间列表被同步替换：按 uid 重新解析，不会整批空跑', async () => {
+  let appRef
+  const routes = routesWith((url) => {
+    const vmid = /vmid=(\d+)/.exec(url)?.[1]
+    if (vmid === '888') {
+      // 模拟 show() 里 syncData 完成：state.list 被替换成一批新对象
+      appRef.state.list = appRef.state.list.map((u) => ({ ...u }))
+      appRef.render()
+      return spaceTag('上海')
+    }
+    return spaceTag('北京')
+  })
+  const { app } = boot({ routes, settings: { accessKey: OK_KEY } })
+  appRef = app
+  open(app)
+  app.state.list = [makeUser({ uid: 1 }), makeUser({ uid: 2 })]
+  app.render()
+
+  await app.fetchInfo('ip')
+
+  assert.equal(app.state.list[0].ipChecked, true, '替换后的新对象也要被检测')
+  assert.equal(app.state.list[0].ip, '北京')
+  assert.equal(app.state.list[1].ip, '北京')
+  assert.ok(app.state.list.every((u) => u.ipChecked))
+})
+
+test('连点两次不会跑两轮并发检测', async () => {
+  let spaceCalls = 0
+  const routes = routesWith(() => { spaceCalls++; return spaceTag('上海') })
+  const { app, log } = boot({ routes, settings: { accessKey: OK_KEY } })
+  open(app)
+  app.state.list = [makeUser({ uid: 1 }), makeUser({ uid: 2 })]
+  app.render()
+
+  const first = app.fetchInfo('ip')
+  const second = app.fetchInfo('ip') // 授权中再点：应被挡住而不是开第二轮
+  await Promise.all([first, second])
+
+  assert.equal(spaceCalls, 3, '应为 1 次校验 + 2 次检测，不能翻倍')
+  assert.ok(app.state.list.every((u) => u.ipChecked))
+  assert.ok(log.requests.length >= 3)
+})
+
+test('整批 0 属地时提示可能授权失效', async () => {
+  const routes = routesWith(() => spaceTag(''))
+  const { app, log } = boot({ routes, settings: { accessKey: OK_KEY } })
+  open(app)
+  app.state.list = [1, 2, 3, 4, 5].map((uid) => makeUser({ uid }))
+  app.render()
+
+  await app.fetchInfo('ip')
+
+  assert.ok(log.alerts.some((m) => m.includes('没有取到任何 IP 属地')))
+  assert.ok(app.state.list.every((u) => u.ipChecked && u.ip === ''))
+})
+
+test('批次中途 canary 探测到 -101 会中止并清 key', async () => {
+  let historyCalls = 0
+  const routes = [
+    {
+      match: 'app.bilibili.com/x/v2/space',
+      respond: (url) => (/vmid=888\b/.test(url) ? spaceTag('') : spaceTag('上海')),
+    },
+    {
+      match: 'app.bilibili.com/x/v2/history',
+      respond: () => (++historyCalls === 1 ? { code: 0 } : { code: -101, message: '账号未登录' }),
+    },
+  ]
+  const { app } = boot({ routes, settings: { accessKey: OK_KEY } })
+  open(app)
+  app.state.list = Array.from({ length: 30 }, (_, i) => makeUser({ uid: i + 1 }))
+  app.render()
+
+  await app.fetchInfo('ip')
+
+  assert.ok(historyCalls >= 2, '应触发 canary')
+  assert.equal(app.settings.accessKey, '', 'canary 失败后要清掉 key')
+  assert.ok(app.state.list.some((u) => !u.ipChecked), '已中止，不能全部写完')
+})
+
+test('列表为空/未渲染时点检测不抛 TypeError', async () => {
+  const { app, log } = boot()
+  open(app)
+  await app.fetchInfo('fans')
+  assert.ok(log.alerts.some((m) => m.includes('列表为空')))
+  assert.equal(app.state.busy, false)
+})
+
 test('parse() 对已解析/旧库对象也补齐 IP 字段', () => {
   const { app } = boot()
   const old = { uid: 5, name: '旧数据', mutual: false }

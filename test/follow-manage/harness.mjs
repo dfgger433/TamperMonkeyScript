@@ -140,6 +140,8 @@ export function boot({
   // 真实页面上 uid 来自 DedeUserID cookie（pathname 是 /<uid>/relation/follow，不含 space/）
   if (uid) w.document.cookie = `DedeUserID=${uid}`
 
+  // 只有测试/探针环境才允许脚本把 App 实例挂到 window（发布版不暴露 access_key）
+  w.__BM_TEST__ = true
   w.eval(SOURCE)
 
   const app = w.__BM_APP

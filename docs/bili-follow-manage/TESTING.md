@@ -1,6 +1,6 @@
 # 测试指南 · IP 属地检测
 
-> 阶段 1 已在本机执行：语法 / 单测（42 项）/ 构建 / 真实探针（4 项）均通过；手动验收待用户在浏览器执行，见 `MANUAL-TEST.md`。
+> 阶段 1 已在本机执行：语法 / 单测（50 项）/ 构建 / 真实探针（4 项）均通过；手动验收待用户在浏览器执行，见 `MANUAL-TEST.md`。
 > 真实站点数据必须由已登录用户验证——仓库与 CI 没有 B 站 Cookie，也没有 `access_key`。
 
 ## 1. 状态（2026-11-02）
@@ -8,8 +8,8 @@
 | 项目 | 命令 | 结果 |
 | --- | --- | --- |
 | 语法 | `node --check BilibiliFollowManage.js` | ✅ 通过（`dist` 产物同样通过） |
-| 单测 | `npm run test:follow` | ✅ 42/42 通过（约 1 s） |
-| 构建 | `npm run build:follow` | ✅ 产出 68586 字节（1.0.2），仅多两行发布地址 |
+| 单测 | `npm run test:follow` | ✅ 50/50 通过（约 1.3 s） |
+| 构建 | `npm run build:follow` | ✅ 产出 71973 字节（1.0.3），仅多两行发布地址 |
 | 探针 A–D | §4 | ✅ 4/4 通过（`node scripts/probe-app-api.mjs`） |
 | 手动验收 | `MANUAL-TEST.md` | ⏳ 待用户执行 |
 
@@ -40,20 +40,22 @@ Get-Content $out -TotalCount 16
 Compare-Object (Get-Content 'BilibiliFollowManage.js') (Get-Content $out)
 ```
 
-预期：产物存在；头部 `@version` 为 `1.0.2`；`Compare-Object` 只有 `@downloadURL`、`@updateURL` 两条 `=>`。
+预期：产物存在；头部 `@version` 为 `1.0.3`；`Compare-Object` 只有 `@downloadURL`、`@updateURL` 两条 `=>`。
 
-单测覆盖（`test/follow-manage/`，42 项）：
+单测覆盖（`test/follow-manage/`，50 项）：
 
 | 文件 | 用例 | 关键断言 |
 | --- | --- | --- |
 | `dropdown.test.mjs`（4） | 状态下拉含 `ip`、chip 文案、旧选项不变、按钮/授权入口存在 | `option[value=ip]` 文案「IP属地」；chip「有IP属地/无IP属地」 |
 | `filter.test.mjs`（3） | 有/无/未检测三态、叠加其它条件、搜索叠加 | 未检测两边都不匹配 |
 | `tags.test.mjs`（4） | 行内 `IP:xx`、`setRowTags` 局部刷新、互关/原始粉丝/分组保留 | 无值时不出 IP 标签 |
-| `detect-ip.test.mjs`（14） | 批量写入/落库、`-352`/`-799` 重试、`-101` 中止、`-404` 记无 IP、网络错误不写、缺 `card` 记失败、选中优先、拒绝授权、unknown 授权门、批次内 key 变更、**点真实按钮**回归、`act` 路由、`parse` 补字段 | 点按钮绝不能走关注/取关；每条请求必须带原 key |
-| `access-key.test.mjs`（14） | 解析裸串/JSON/片段、校验（location/`-101`/正常/unknown）、手动粘贴成功/失败/unknown 确认与拒绝、TV 授权成功/失败/unknown 拒绝、清除、已授权不弹窗 | 假 key 不会被判为有效；unknown 不静默放行 |
-| `sync.test.mjs`（3） | 同步保留 `ip/ipChecked/ipAt`、不串旧数据、`attribute=6`/`face` 处理 | — |
+| `detect-ip.test.mjs`（19） | 批量写入/落库、`-352`/`-799` 重试、`-101` 中止、`-404` 记无 IP、网络错误不写、缺 `card` 记失败、选中优先、拒绝授权、unknown 授权门、批次内 key 变更、**点真实按钮**回归、`act` 路由、`parse` 补字段、**授权期间同步替换列表**、**双击不并发两轮**、**整批 0 属地告警**、**canary -101 中止**、空库不抛错 | 点按钮绝不能走关注/取关；每条请求必须带原 key；同步替换后仍能写入新对象 |
+| `access-key.test.mjs`（14） | 解析裸串/JSON/片段、校验（location/`-101`/正常/unknown）、手动粘贴成功/失败/unknown 确认与拒绝、TV 授权成功/失败/unknown 拒绝、清除、已授权不弹窗 | 假 key 不会被判为有效；unknown 不静默放行；confirm 带 csrf 且不手写 Cookie 头 |
+| `sync.test.mjs`（6） | 同步保留 `ip/ipChecked/ipAt`、不串旧数据、`attribute=6`/`face` 处理、**导入 1.0.0 备份不抹 IP**、**导入 1.0.3 备份按备份覆盖**、**新用户追加** | 旧备份缺 `ip` 时必须保留本机结果 |
 
 桩要求：jsdom 启动脚本；`GM_addStyle` 空实现；`GM_xmlhttpRequest` 可控返回；`indexedDB` 用内存实现；`alert/confirm/prompt` 记录调用；`setTimeout` 立即执行（避免真实等待 800 ms）。
+
+已知局限：`setTimeout` 被同步化，因此 800 ms 间隔、真实并发时序、停止的精确时点无法测；浏览器 HttpOnly cookie 与 TM 的 cookie jar 行为也无法在 jsdom 模拟。这些靠 `MANUAL-TEST.md` 真机覆盖（尤其 8.1 停止、11.2 TV 授权）。
 
 ## 4. 接口探针（可直接运行）
 
@@ -132,7 +134,7 @@ node scripts/probe-app-api.mjs
 | `indexedDB is not defined` | jsdom 桩缺失 | 在 setup 注入内存版 `indexedDB` |
 | 测试卡住 | `setTimeout` 真实等待 | 用假定时器立即执行 |
 | `GM_xmlhttpRequest is not defined` | 启动脚本未注入 | 在 `before` 里挂到 `globalThis` |
-| 构建找不到版本 | 头部正则不匹配 | 确认 `@version      1.0.2` 仍在首 15 行 |
+| 构建找不到版本 | 头部正则不匹配 | 确认 `@version      1.0.3` 仍在首 15 行 |
 | 产物多出差异 | 构建重复注入/换行 | 检查 `@downloadURL` 是否只出现一次 |
 | 探针非 0 | 时钟偏差/签名排序/UA/风控 | 校时；打印 `$s` 与 `$sign` 比对 |
 

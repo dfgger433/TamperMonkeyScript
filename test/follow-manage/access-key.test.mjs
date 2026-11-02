@@ -132,7 +132,10 @@ test('自动授权：auth_code → confirm → poll 三步后保存来源为 tv'
   assert.equal(app.settings.accessKey, 'TOKEN123')
   assert.equal(app.settings.accessKeySrc, 'tv')
   assert.ok(log.requests.some((r) => r.url.includes('/qrcode/auth_code')))
-  assert.ok(log.requests.some((r) => r.url.includes('/h5/qrcode/confirm')))
+  const confirm = log.requests.find((r) => r.url.includes('/h5/qrcode/confirm'))
+  assert.ok(confirm, '应调用 confirm')
+  assert.match(String(confirm.data || ''), /csrf=csrf123/, 'confirm 要带 csrf')
+  assert.ok(!confirm.headers || !('Cookie' in confirm.headers), '不要手写 Cookie 头，交给浏览器 cookie jar')
   assert.ok(log.requests.some((r) => r.url.includes('/qrcode/poll')))
 })
 

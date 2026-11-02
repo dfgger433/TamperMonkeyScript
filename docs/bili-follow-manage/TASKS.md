@@ -23,7 +23,7 @@
 
 ## 2. 代码：头部与常量
 
-- [x] `@version` 改 `1.0.2`
+- [x] `@version` 改 `1.0.3`
 - [x] `@description` 追加「主页 IP 属地检测」
 - [x] 新增 `@connect app.bilibili.com`
 - [x] 新增 `@connect passport.bilibili.com`
@@ -107,12 +107,14 @@
 - [x] 用例：dropdown（4）
 - [x] 用例：filter（3）
 - [x] 用例：tags（4）
-- [x] 用例：detect-ip（14）
+- [x] 用例：detect-ip（19）
 - [x] 用例：access-key（14）
-- [x] 用例：sync（3）
-- [x] `npm run test:follow` 全绿（42/42）
+- [x] 用例：sync（6）
+- [x] `npm run test:follow` 全绿（50/50）
 - [x] 审查修复（P0）：`act()` 用 `startsWith('fetch-')` 路由，补「点真实按钮」回归测试，断言不发起 `x/relation/*modify`
 - [x] 审查修复（P1）：批次内固定 `scanKey` 且变更即停；`manageAccessKey` 加 `busy` 守卫；`unknown` 改确认门；缺 `card` 记失败
+- [x] 审查修复（中）：同步替换列表后按 uid 重新解析；双击 `busy` 前置 + `_ipAuthing`；导入旧备份保留 IP；每 25 人 canary + 整批 0 属地告警
+- [x] 审查修复（低）：TV 授权不手写 Cookie；`.bm-name` 省略号；调试钩子仅 `__BM_TEST__` 暴露；`state.view` 初始化
 - [x] `npm run build:follow` 产物校验（版本、两行、`node --check` 通过）
 - [x] 新增 `scripts/probe-app-api.mjs`，真实探针 4/4（`TESTING.md` §4 已记录日期）
 
@@ -126,7 +128,7 @@
 
 ## 11. 交付
 
-- [x] 产物拷到 `H:\资源\js脚本\bilibili.com\BiliBili 关注管理-1.0.2.user.js`
+- [x] 产物拷到 `H:\资源\js脚本\bilibili.com\BiliBili 关注管理-1.0.3.user.js`
 - [x] 回写 `H:\资源\js脚本\bilibili.com\TamperMonkeyScript-main\BilibiliFollowManage.js`（源文件）
 - [x] 比对回写文件与仓库源文件一致（md5）
 - [ ] 交用户按 `MANUAL-TEST.md` 验收

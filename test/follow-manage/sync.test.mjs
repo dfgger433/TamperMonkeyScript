@@ -57,3 +57,40 @@ test('同步后 attribute=6 记为互关、face 去掉 http:', async () => {
   assert.equal(second.mutual, true)
   assert.ok(!first.face.startsWith('http:'))
 })
+
+test('导入 1.0.0 备份不会抹掉已检测的 IP', () => {
+  const { app } = boot()
+  open(app)
+  app.state.list = [makeUser({ uid: 1, name: '甲', ip: '上海', ipChecked: true, ipAt: 111 })]
+  // 1.0.0 导出的对象没有 ip 字段
+  const oldBackup = [{ uid: 1, name: '甲', fans: 5, mutual: false, groups: [], followTime: 1 }]
+  const added = app.mergeImported(oldBackup)
+
+  assert.equal(added, 0)
+  assert.equal(app.state.list[0].fans, 5, '其它字段按备份更新')
+  assert.equal(app.state.list[0].ip, '上海', '备份没有 ip 时必须保留本机结果')
+  assert.equal(app.state.list[0].ipChecked, true)
+  assert.equal(app.state.list[0].ipAt, 111)
+})
+
+test('导入 1.0.2 备份会按备份覆盖 IP', () => {
+  const { app } = boot()
+  open(app)
+  app.state.list = [makeUser({ uid: 1, name: '甲', ip: '上海', ipChecked: true, ipAt: 111 })]
+  app.mergeImported([{ uid: 1, name: '甲', mutual: false, ip: '北京', ipChecked: true, ipAt: 222 }])
+  assert.equal(app.state.list[0].ip, '北京')
+  assert.equal(app.state.list[0].ipAt, 222)
+})
+
+test('导入新用户正常追加', () => {
+  const { app } = boot()
+  open(app)
+  app.state.list = []
+  const added = app.mergeImported([
+    { uid: 7, name: '新人', mutual: false, ip: '', ipChecked: false },
+    { uid: 8, name: '新人2', mutual: false },
+  ])
+  assert.equal(added, 2)
+  assert.equal(app.state.list.length, 2)
+  assert.equal(app.state.list.find((u) => u.uid === 8).ipChecked, false)
+})

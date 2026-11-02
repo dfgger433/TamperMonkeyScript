@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         BiliBili 关注管理
 // @namespace    https://github.com/YisRime/TamperMonkeyScript
-// @version      1.0.2
+// @version      1.0.3
 // @description  B站关注管理，支持批量取关、分组管理、信息同步、主页 IP 属地检测等功能，适用于批量管理关注列表。
 // @author       苡淞
 // @match        https://space.bilibili.com/*/relation/follow*
@@ -86,6 +86,7 @@
         .bm-u-info{display:flex;flex-direction:column;justify-content:center;overflow:hidden}
         .bm-u-row1{display:flex;align-items:center;gap:6px}
         .bm-name{font-weight:500;color:#18191c;text-decoration:none;font-size:14px}
+        .bm-name{min-width:0;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
         .bm-name:hover{color:var(--b-blue)}
         .bm-sign{font-size:12px;color:#9499a0;margin-top:3px;overflow:hidden;text-overflow:ellipsis}
         .bm-tag{font-size:11px;padding:0 6px;height:18px;border-radius:4px;display:inline-flex;align-items:center;justify-content:center;border:1px solid;line-height:1;flex-shrink:0;font-weight:400;margin-left:2px}
@@ -111,7 +112,7 @@
                 list: [], groups: {}, wbi: null, busy: false, stop: false,
                 sort: { k: null, d: 0 },
                 filter: { fans: '>=', date: '<=', dateType: 'mtime' },
-                conds: [], selected: new Set()
+                conds: [], selected: new Set(), view: []
             };
             this.settings = {
                 shortDelay: 300, longDelay: 5000, autoDeselect: true,
@@ -663,6 +664,22 @@
             this.render();
         }
 
+        /** 导入 JSON：已存在的人只更新备份里确实有的字段；备份不含 ip 时保留本机已检测结果 */
+        mergeImported(list) {
+            const map = new Map(); this.state.list.forEach(u => map.set(u.uid, u));
+            let n = 0;
+            list.forEach(raw => {
+                const hasIp = !!raw && Object.prototype.hasOwnProperty.call(raw, 'ip');
+                const u = this.parse(raw);
+                const exist = map.get(u.uid);
+                if (!exist) { this.state.list.unshift(u); map.set(u.uid, u); n++; return; }
+                const prev = { ip: exist.ip, ipChecked: exist.ipChecked, ipAt: exist.ipAt };
+                Object.assign(exist, u);
+                if (!hasIp) { exist.ip = prev.ip; exist.ipChecked = prev.ipChecked; exist.ipAt = prev.ipAt; }
+            });
+            return n;
+        }
+
         async act(t, op) {
             // fetch-fans / fetch-dyn / fetch-ip → fetchInfo('fans'|'dyn'|'ip')
             if (t.startsWith('fetch-')) return this.fetchInfo(t.slice('fetch-'.length));
@@ -680,13 +697,7 @@
                         try {
                             const d = JSON.parse(ev.target.result);
                             if (!Array.isArray(d)) throw 0;
-                            const map = new Map(); this.state.list.forEach(u => map.set(u.uid, u));
-                            let n = 0;
-                            d.forEach(raw => {
-                                const u = this.parse(raw);
-                                if (map.has(u.uid)) Object.assign(map.get(u.uid), u);
-                                else { this.state.list.unshift(u); map.set(u.uid, u); n++; }
-                            });
+                            const n = this.mergeImported(d);
                             this.render(); this.saveDB(); alert(`导入完成，新增 ${n} 人`);
                         } catch { alert('文件格式错误'); }
                     };
@@ -809,9 +820,10 @@
             const auth = await post('https://passport.bilibili.com/x/passport-tv-login/qrcode/auth_code', signParam(loginQuery, LOGIN_APP_SEC));
             const csrf = document.cookie.match(/bili_jct=([^;]+)/)?.[1] || '';
             if (!csrf) throw { code: -1, message: '未登录（缺少 bili_jct）' };
+            // 不手写 Cookie 头：GM_xmlhttpRequest 会自动带浏览器 cookie jar（含 HttpOnly 的 SESSDATA），
+            // 手动传 document.cookie 反而可能覆盖掉 HttpOnly 部分导致确认失败
             await post('https://passport.bilibili.com/x/passport-tv-login/h5/qrcode/confirm',
-                `auth_code=${auth.data.auth_code}&csrf=${csrf}&scanning_type=1`,
-                { Cookie: document.cookie });
+                `auth_code=${auth.data.auth_code}&csrf=${csrf}&scanning_type=1`);
             const poll = await post('https://passport.bilibili.com/x/passport-tv-login/qrcode/poll',
                 signParam(`auth_code=${auth.data.auth_code}&${loginQuery}`, LOGIN_APP_SEC));
             return poll.data?.access_token || '';
@@ -905,113 +917,150 @@
             return this.promptAccessKey();
         }
 
+        async probeKey(key) {
+            const q = signParam(`access_key=${key}&appkey=${APP_KEY}&build=${APP_BUILD}&mobi_app=android&platform=android&pn=1&ps=1`, APP_SEC);
+            await this.appReq(`https://app.bilibili.com/x/v2/history?${q}`, 0);
+        }
+
         async fetchInfo(type) {
-            if (this.state.busy) { this.state.stop = true; return; }
+            if (this.state.busy) {
+                if (this._ipAuthing) this.toast('正在等待授权完成，请稍候…');
+                else this.state.stop = true; // 再点一次 = 停止
+                return;
+            }
             let items = Array.from(this.state.selected).map(m => this.state.list.find(x => x.uid === m)).filter(x => x);
-            if (!items.length) items = this.view;
+            if (!items.length) items = this.view || [];
             if (!items.length) return alert('列表为空');
             const isIp = type === 'ip';
-            if (isIp && !(await this.ensureAccessKey())) return;
-            // 批次内固定用这一个 key：中途被清/改就立即停，免得用空 key 把所有人写成“无 IP”
-            const scanKey = isIp ? (this.settings.accessKey || '') : '';
-            if (isIp && !scanKey) { alert('没有可用的 access_key'); return; }
-            this._ipAbort = '';
-            this.state.busy = true; this.state.stop = false;
-            const delayMs = isIp ? Math.max(this.settings.shortDelay, 800)
-                : (type === 'fans' ? this.settings.shortDelay : this.settings.longDelay);
-            const conc = isIp ? 2 : 5;
             const b = Q({ fans: '#bm-btn-fetch-fans', dyn: '#bm-btn-fetch-dyn', ip: '#bm-btn-fetch-ip' }[type]);
+            if (!b) return;
             const originalText = b.textContent;
-            b.textContent = '停止'; b.classList.add('processing');
-            const st = Q('#bm-st');
-            let completed = 0, failed = 0;
-            if (!isIp) await this.getWbi();
-            const updateProgress = (err) => {
-                completed++; if (err) failed++;
-                st.innerHTML = `${isIp ? 'IP 检测中' : '更新中'}... <span class="bm-status-num">${completed}</span> / ${items.length}${failed ? `（失败 ${failed}）` : ''}`;
-            };
-            const tasks = items.map(u => async () => {
-                if (this.state.stop || this.ui.style.display === 'none' || !this.state.list.includes(u)) return;
-                if (isIp && this.settings.accessKey !== scanKey) {
-                    this._ipAbort = 'changed';
-                    this.state.stop = true;
-                    return;
+            this.state.busy = true; this.state.stop = false;
+            try {
+                let scanKey = '';
+                if (isIp) {
+                    this._ipAuthing = true;
+                    let ok = false;
+                    try { ok = await this.ensureAccessKey(); } finally { this._ipAuthing = false; }
+                    if (!ok) return;
+                    scanKey = this.settings.accessKey || '';
+                    if (!scanKey) { alert('没有可用的 access_key'); return; }
+                    // 授权期间可能刚同步过关注列表：按 uid 重新解析，避免整批被对象身份守卫跳过
+                    const ids = new Set(items.map(u => u.uid));
+                    items = this.state.list.filter(u => ids.has(u.uid));
+                    if (!items.length) { alert('关注列表已更新，请重新检测'); return; }
                 }
-                let err = null;
-                try {
-                    if (type === 'fans') {
-                        const { data } = await this.req(`https://api.bilibili.com/x/relation/stat?vmid=${u.uid}`);
-                        u.fans = data.follower;
-                        const c = Q(`tr[data-mid="${u.uid}"]`)?.cells[2];
-                        if (c) c.textContent = u.fans.toLocaleString();
-                    } else if (type === 'dyn') {
-                        const q = encWbi({ mid: u.uid, ps: 1, pn: 1 }, this.state.wbi.ik, this.state.wbi.sk);
-                        const [videoRes, dynRes] = await Promise.all([
-                            this.req(`https://api.bilibili.com/x/space/wbi/arc/search?${q}`).catch(()=>({data:{list:{vlist:[]}}})),
-                            this.req(`https://api.bilibili.com/x/polymer/web-dynamic/v1/feed/space?host_mid=${u.uid}&offset=`).catch(()=>({data:{items:[]}}))
-                        ]);
-        
-                        u.videoTime = videoRes.data?.list?.vlist?.[0]?.created || u.videoTime || 0;
-                        const c_v = Q(`tr[data-mid="${u.uid}"]`)?.cells[4];
-                        if (c_v) c_v.textContent = u.videoTime ? new Date(u.videoTime * 1000).toISOString().split('T')[0] : '-';
-        
-                        u.dynamicTime = dynRes.data?.items?.reduce((max, x) => Math.max(max, x?.modules?.module_author?.pub_ts || 0), 0) || u.dynamicTime || 0;
-                        const c_d = Q(`tr[data-mid="${u.uid}"]`)?.cells[3];
-                        if (c_d) c_d.textContent = u.dynamicTime ? new Date(u.dynamicTime * 1000).toISOString().split('T')[0] : '-';
-                    } else if (isIp) {
-                        u.ip = await this.fetchIpLocation(u.uid, scanKey);
-                        u.ipChecked = true; u.ipAt = Date.now();
-                        this.setRowTags(u);
+                this._ipAbort = '';
+                b.textContent = '停止'; b.classList.add('processing');
+                const delayMs = isIp ? Math.max(this.settings.shortDelay, 800)
+                    : (type === 'fans' ? this.settings.shortDelay : this.settings.longDelay);
+                const conc = isIp ? 2 : 5;
+                const st = Q('#bm-st');
+                let completed = 0, failed = 0, hits = 0;
+                if (!isIp) await this.getWbi();
+                const updateProgress = (err) => {
+                    completed++; if (err) failed++;
+                    st.innerHTML = `${isIp ? 'IP 检测中' : '更新中'}... <span class="bm-status-num">${completed}</span> / ${items.length}${failed ? `（失败 ${failed}）` : ''}`;
+                };
+                const tasks = items.map(u => async () => {
+                    // 每步按 uid 取当前对象：同步替换 state.list 后依然写入新对象
+                    const cur = this.state.list.find(x => x.uid === u.uid);
+                    if (this.state.stop || this.ui.style.display === 'none' || !cur) return;
+                    if (isIp && this.settings.accessKey !== scanKey) {
+                        this._ipAbort = 'changed';
+                        this.state.stop = true;
+                        return;
                     }
-                    await this.updateDBItem(u);
-                } catch (e) {
-                    err = e;
-                    console.error(`Failed to fetch info for ${u.uid}`, e);
-                    if (e?.code === -101) { this.state.stop = true; if (isIp) this._keyInvalid = true; }
-                    if (isIp && e?.code === -404) {
-                        u.ip = ''; u.ipChecked = true; u.ipAt = Date.now();
-                        this.setRowTags(u); err = null;
-                        this.updateDBItem(u).catch(() => {});
+                    let err = null;
+                    try {
+                        if (type === 'fans') {
+                            const { data } = await this.req(`https://api.bilibili.com/x/relation/stat?vmid=${cur.uid}`);
+                            cur.fans = data.follower;
+                            const c = Q(`tr[data-mid="${cur.uid}"]`)?.cells[2];
+                            if (c) c.textContent = cur.fans.toLocaleString();
+                        } else if (type === 'dyn') {
+                            const q = encWbi({ mid: cur.uid, ps: 1, pn: 1 }, this.state.wbi.ik, this.state.wbi.sk);
+                            const [videoRes, dynRes] = await Promise.all([
+                                this.req(`https://api.bilibili.com/x/space/wbi/arc/search?${q}`).catch(()=>({data:{list:{vlist:[]}}})),
+                                this.req(`https://api.bilibili.com/x/polymer/web-dynamic/v1/feed/space?host_mid=${cur.uid}&offset=`).catch(()=>({data:{items:[]}}))
+                            ]);
+        
+                            cur.videoTime = videoRes.data?.list?.vlist?.[0]?.created || cur.videoTime || 0;
+                            const c_v = Q(`tr[data-mid="${cur.uid}"]`)?.cells[4];
+                            if (c_v) c_v.textContent = cur.videoTime ? new Date(cur.videoTime * 1000).toISOString().split('T')[0] : '-';
+        
+                            cur.dynamicTime = dynRes.data?.items?.reduce((max, x) => Math.max(max, x?.modules?.module_author?.pub_ts || 0), 0) || cur.dynamicTime || 0;
+                            const c_d = Q(`tr[data-mid="${cur.uid}"]`)?.cells[3];
+                            if (c_d) c_d.textContent = cur.dynamicTime ? new Date(cur.dynamicTime * 1000).toISOString().split('T')[0] : '-';
+                        } else if (isIp) {
+                            cur.ip = await this.fetchIpLocation(cur.uid, scanKey);
+                            cur.ipChecked = true; cur.ipAt = Date.now();
+                            if (cur.ip) hits++;
+                            this.setRowTags(cur);
+                        }
+                        await this.updateDBItem(cur);
+                    } catch (e) {
+                        err = e;
+                        console.error(`Failed to fetch info for ${cur.uid}`, e);
+                        if (e?.code === -101) { this.state.stop = true; if (isIp) this._keyInvalid = true; }
+                        if (isIp && e?.code === -404) {
+                            cur.ip = ''; cur.ipChecked = true; cur.ipAt = Date.now();
+                            this.setRowTags(cur); err = null;
+                            this.updateDBItem(cur).catch(() => {});
+                        }
+                    }
+                    updateProgress(err);
+                });
+                const queue = [...tasks];
+                const executing = new Set();
+                let canaryAt = 0;
+                while (queue.length > 0 && !this.state.stop) {
+                    while (executing.size < conc && queue.length > 0 && !this.state.stop) {
+                        const task = queue.shift();
+                        const promise = task().finally(() => executing.delete(promise));
+                        executing.add(promise);
+                        if (delayMs > 0) await new Promise(r => setTimeout(r, delayMs));
+                    }
+                    if (executing.size > 0) await Promise.race(executing);
+                    // canary：每 25 人用批次 key 打一次需要登录的接口，防止服务端中途把 key 降级为匿名
+                    if (isIp && !this.state.stop && completed >= canaryAt + 25) {
+                        canaryAt = completed;
+                        try { await this.probeKey(scanKey); }
+                        catch (e) { if (e?.code === -101) { this._keyInvalid = true; this.state.stop = true; } }
                     }
                 }
-                updateProgress(err);
-            });    
-            const queue = [...tasks];
-            const executing = new Set();
-            while (queue.length > 0 && !this.state.stop) {
-                while (executing.size < conc && queue.length > 0 && !this.state.stop) {
-                    const task = queue.shift();
-                    const promise = task().finally(() => executing.delete(promise));
-                    executing.add(promise);
-                    if (delayMs > 0) await new Promise(r => setTimeout(r, delayMs));
-                }
-                if (executing.size > 0) await Promise.race(executing);
-            }
-            await Promise.all(executing);
+                await Promise.all(executing);
 
-            const isStopped = this.state.stop;
-            this.state.busy = false; this.state.stop = false;
-            b.textContent = originalText;
-            b.classList.remove('processing');
-            if (this.settings.autoDeselect) this.state.selected.clear();
-            this.render();
-            // render() 里的 updateUI() 会重写状态栏，所以完成信息放在它之后写
-            st.textContent = isStopped
-                ? `已停止（${isIp ? `IP 已检测 ${completed - failed}/${items.length}` : `已完成 ${completed}/${items.length}`}）`
-                : (isIp
-                    ? `IP 检测完成 ${completed - failed}/${items.length}${failed ? `（失败 ${failed}）` : ''}`
-                    : `更新完成 ${completed} 人`);
-            if (this._keyInvalid) {
-                this._keyInvalid = false;
-                this.settings.accessKey = '';
-                this.settings.accessKeySrc = '';
-                this.saveSettings();
-                this.updateAuthLabel();
-                alert('access_key 已失效，检测已中止。请点「IP授权」重新授权后再试。');
-            } else if (this._ipAbort === 'changed') {
-                this.toast('授权已变更，IP 检测已停止');
+                const isStopped = this.state.stop;
+                if (this.settings.autoDeselect) this.state.selected.clear();
+                this.render();
+                // render() 里的 updateUI() 会重写状态栏，所以完成信息放在它之后写
+                st.textContent = isStopped
+                    ? `已停止（${isIp ? `IP 已检测 ${completed - failed}/${items.length}` : `已完成 ${completed}/${items.length}`}）`
+                    : (isIp
+                        ? `IP 检测完成 ${completed - failed}/${items.length}${failed ? `（失败 ${failed}）` : ''}`
+                        : `更新完成 ${completed} 人`);
+                if (isIp && !isStopped && failed === 0 && hits === 0 && items.length >= 5) {
+                    alert('本次检测没有取到任何 IP 属地。\n\n若这些用户主页本应显示属地，可能是 access_key 未生效（假/过期 key 同样返回 code:0）。建议点「IP授权」重新授权后再试。');
+                }
+                if (this._keyInvalid) {
+                    this._keyInvalid = false;
+                    this.settings.accessKey = '';
+                    this.settings.accessKeySrc = '';
+                    this.saveSettings();
+                    this.updateAuthLabel();
+                    alert('access_key 已失效，检测已中止。请点「IP授权」重新授权后再试。');
+                } else if (this._ipAbort === 'changed') {
+                    this.toast('授权已变更，IP 检测已停止');
+                }
+            } finally {
+                this._ipAbort = '';
+                this._ipAuthing = false;
+                this.state.busy = false;
+                this.state.stop = false;
+                b.textContent = originalText;
+                b.classList.remove('processing');
             }
-            this._ipAbort = '';
         }
 
         async modRel(items, act) {
@@ -1072,8 +1121,10 @@
     }
     const __bmApp = new App();
     try {
-        window.__BM_APP = __bmApp;
-        // 调试/探针用（常量与签名算法都不是秘密）
-        window.__BM_DEBUG = { signParam, APP_KEY, APP_SEC, LOGIN_APP_KEY, LOGIN_APP_SEC, APP_BUILD, APP_UA };
+        // 只在测试/探针（jsdom 里会先设 __BM_TEST__）下暴露实例：settings 里有 access_key，不挂到页面 window
+        if (window.__BM_TEST__) {
+            window.__BM_APP = __bmApp;
+            window.__BM_DEBUG = { signParam, APP_KEY, APP_SEC, LOGIN_APP_KEY, LOGIN_APP_SEC, APP_BUILD, APP_UA };
+        }
     } catch (e) {}
 })();

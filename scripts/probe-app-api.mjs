@@ -18,6 +18,7 @@ w.alert = () => {}
 w.confirm = () => false
 w.prompt = () => null
 w.document.cookie = 'DedeUserID=2'
+w.__BM_TEST__ = true
 w.GM_xmlhttpRequest = (opts) => {
   fetch(opts.url, { method: opts.method || 'GET', headers: opts.headers, body: opts.data })
     .then(async (r) => {
