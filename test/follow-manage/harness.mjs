@@ -86,6 +86,7 @@ export function boot({
   settings = {},
   confirmQueue = [],
   promptQueue = [],
+  fetch: fakeFetch = null,
 } = {}) {
   const dom = new JSDOM('<!doctype html><html><body></body></html>', {
     url,
@@ -142,7 +143,11 @@ export function boot({
 
   // 只有测试/探针环境才允许脚本把 App 实例挂到 window（发布版不暴露 access_key）
   w.__BM_TEST__ = true
+  if (fakeFetch) w.fetch = fakeFetch
   w.eval(SOURCE)
+  // 脚本是 @run-at document-start 语义：jsdom 构造期间 readyState 仍为 loading，
+  // 手动补发一次 DOMContentLoaded 触发面板初始化（监听器是一次性的，不会重复建）
+  if (!w.__BM_APP) w.document.dispatchEvent(new w.Event('DOMContentLoaded'))
 
   const app = w.__BM_APP
   if (!app) throw new Error('脚本没有暴露 window.__BM_APP（测试钩子丢失？）')

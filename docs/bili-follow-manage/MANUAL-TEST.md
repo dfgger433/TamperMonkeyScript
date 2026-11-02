@@ -1,4 +1,4 @@
-# 手动验收清单 · IP 属地检测 1.1.0
+# 手动验收清单 · IP 属地 + 老粉计划检测 1.1.1
 
 > 给已登录 B 站的用户执行；本轮**未执行**，结果待填。
 > 目标：验证 A1–A8（见 `PLAN.md` §2）。阶段 2「老粉计划」不在本清单内。
@@ -11,7 +11,7 @@
 | 登录 | 已登录 B 站，能打开自己的关注列表 |
 | 备份 | 导出当前关注数据 JSON；保留 1.0.0 脚本文件 |
 | 页面 | `https://space.bilibili.com/<你的UID>/relation/follow` |
-| 安装 | 导入 `dist/BiliBili 关注管理-1.1.0.user.js`（或粘贴源码） |
+| 安装 | 导入 `dist/BiliBili 关注管理-1.1.1.user.js`（或粘贴源码） |
 
 安全提示：`access_key` 等同账号凭据，不要截图、不要发群；TV 授权可能导致网页端掉线，先看清提示再扫码。
 
@@ -19,7 +19,7 @@
 
 | 步骤 | 操作 | 预期结果 | 失败时看哪里 |
 | --- | --- | --- | --- |
-| 1.1 | 安装 1.1.0，刷新关注页 | 右侧「关注管理」按钮出现，版本为 1.1.0 | Tampermonkey 是否启用；`@match`；F12 Console |
+| 1.1 | 安装 1.1.1，刷新关注页 | 右侧「关注管理」按钮出现，版本为 1.1.1 | Tampermonkey 是否启用；`@match`；F12 Console |
 | 1.2 | 点开面板，展开「状态」下拉 | 末尾有「IP属地」 | `#bm-s-stat` 是否存在该 option；脚本是否旧版 |
 | 1.3 | 看动作栏、子栏 | 「动态」后有「IP属地」；「清空缓存」后有「IP授权: 未授权」 | `#bm-btn-fetch-ip`、`#bm-ip-auth`；CSS 是否加载 |
 
@@ -105,21 +105,31 @@
 | 11.2 | 等待自动授权 | 依次请求 `passport.bilibili.com` 的 `auth_code` → `h5/qrcode/confirm` → `qrcode/poll`，成功后标签变「已授权」，`accessKeySrc=tv` | Network 过滤 `passport.bilibili.com`；各步 `code`；是否缺 `bili_jct` |
 | 11.3 | 检查网页登录 | 若掉线，重新登录即可；脚本数据（IP 结果）不丢 | Cookie `SESSDATA`；重新登录后重测 4.2 |
 
-## 12. 老粉计划检测（任务 2）
+## 12. 老粉计划检测（任务 2，主页采集模式）
 
-> 数据源：网页接口 `x/space/wbi/acc/info` 的 `data.contract`，`is_follow_display`（是否显示老粉计划）/ `is_display`。**不需要 access_key**，但需要网页登录态（风控）。
+> 数据源：网页接口 `x/space/wbi/acc/info` 的 `data.contract`，`is_follow_display`（是否显示老粉计划）/ `is_display`。
+> **重要**：该接口有 gaia 风控——脚本自己批量直连基本都会 `-352`（实测补齐 UA/Referer/Origin/buvid 也一样），所以 1.1.1 改成**参考脚本的采集方式**：钩住空间页自己的 `acc/info` 响应，存进共享缓存（`localStorage` 的 `BiliFollowManageOldFanCache`），面板再合并。
 > 注意：状态下拉里原有的「老粉」是 `contract_info.is_contract`（原始粉丝），与「老粉计划」不是一回事，不要混淆。
+
+### 推荐流程（无风控）
 
 | 步骤 | 操作 | 预期结果 | 失败时看哪里 |
 | --- | --- | --- | --- |
-| 12.1 | 看动作栏、展开状态下拉 | 「IP属地」后有「老粉计划」按钮；下拉末尾有「老粉计划」选项 | `#bm-btn-fetch-oldfan`；`#bm-s-stat` 的 `option[value=oldfan]`；是否装了旧版 |
-| 12.2 | 选中 3–5 人，点「老粉计划」 | 按钮变「停止」；`#bm-st` 显示 `老粉计划检测中 n / total`；**不能弹关注/取关确认** | Network 过滤 `x/space/wbi/acc/info`；Console |
-| 12.3 | 等待完成 | 会显示老粉计划的用户行内出现「老粉计划」标签（琥珀色）；不会的没有标签；`#bm-st` 显示「老粉计划检测完成 x/y」 | 行内 `.bm-tags`；`oldFan/oldFanChecked`；接口 `contract` |
-| 12.4 | 状态下拉选「老粉计划」，切「是」/「非」 | 只显示已检测且有/无老粉计划的人；chip 写「有老粉计划」/「无老粉计划」；未检测的人两边都不出现 | `addCond` chip 文案；`render()` 三态分支 |
-| 12.5 | 与「IP属地」条件叠加 | 取交集，可单独删除条件 | `renderConds` |
-| 12.6 | 刷新页面 / 点同步 / 导出再导入 | `oldFan/oldFanChecked/oldFanAt` 保留（旧备份不含该字段时也不能被清空） | IndexedDB `follows`；`parse()`/`mergeImported` |
-| 12.7 | 检测一个已注销账号（可选） | 记为「已检测·无老粉计划」，不计失败 | `-404` 分支 |
-| 12.8 | 断网检测 3 人 | 失败计数增加，不写成「无老粉计划」，可重试 | `#bm-st` 失败数；`reqRetry` |
+| 12.1 | 看动作栏、展开状态下拉 | 「IP属地」后有「老粉计划」按钮；下拉末尾有「老粉计划」选项 | `#bm-btn-fetch-oldfan`；`option[value=oldfan]`；是否装了旧版 |
+| 12.2 | 点「关注管理」→ 列表中点某个用户名字（新标签打开其主页） | 主页正常打开；脚本在该页自动捕获 `acc/info`，无需任何点击 | Network 过滤 `x/space/wbi/acc/info`；Console 是否有 `[BiliFollowManage] 初始化失败` |
+| 12.3 | 回到关注页（面板还开着） | 该用户行内自动出现「老粉计划」标签（琥珀色，仅当有）；或切回标签页触发 focus 合并 | 行内 `.bm-tags`；localStorage 键 `BiliFollowManageOldFanCache` |
+| 12.4 | 打开一批用户主页后，点「老粉计划」按钮 | 已采集的人直接合并（提示「无需请求」或只请求未采集的人）；不再批量打接口 | `#bm-st` 文案；Network 是否有 `acc/info` 请求 |
+| 12.5 | 状态下拉选「老粉计划」，切「是」/「非」 | 只显示已检测且有/无老粉计划的人；chip 写「有老粉计划」/「无老粉计划」；未检测两边都不出现 | `addCond` chip 文案；`render()` 三态分支 |
+| 12.6 | 与「IP属地」条件叠加 | 取交集，可单独删除条件 | `renderConds` |
+| 12.7 | 刷新页面 / 点同步 / 导出再导入 | `oldFan/oldFanChecked/oldFanAt` 保留（旧备份不含该字段时也不能被清空） | IndexedDB `follows`；`parse()`/`mergeImported` |
+
+### 风控与兜底
+
+| 步骤 | 操作 | 预期结果 | 失败时看哪里 |
+| --- | --- | --- | --- |
+| 12.8 | 对未采集的人直接点「老粉计划」 | 串行、每次间隔 ≥2.5s；若接口返回 `-352`，**立即熔断整批**并弹窗提示改用主页采集，未检测的人保持「未检测」，不会写成「无老粉计划」 | 弹窗文案；`#bm-st` 是否「已停止」；Network 的 `acc/info` 响应码 |
+| 12.9 | 连续打开多个用户主页 | 每个主页 1 次页面自身请求；脚本只在响应到达时写缓存，不额外发请求 | Network 是否出现重复的 `acc/info` |
+| 12.10 | 检测一个已注销账号（可选） | 记为「已检测·无老粉计划」，不计失败 | `-404` 分支 |
 
 ## 13. 验收记录
 

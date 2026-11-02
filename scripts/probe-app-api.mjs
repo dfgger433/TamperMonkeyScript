@@ -28,6 +28,7 @@ w.GM_xmlhttpRequest = (opts) => {
     .catch((e) => { if (opts.onerror) opts.onerror(e) })
 }
 w.eval(SOURCE)
+if (!w.__BM_APP) w.document.dispatchEvent(new w.Event('DOMContentLoaded'))
 const app = w.__BM_APP
 
 const results = []

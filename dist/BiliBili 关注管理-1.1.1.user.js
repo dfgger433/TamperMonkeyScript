@@ -1,13 +1,16 @@
 // ==UserScript==
 // @name         BiliBili 关注管理
 // @namespace    https://github.com/YisRime/TamperMonkeyScript
-// @version      1.1.0
-// @description  B站关注管理，支持批量取关、分组管理、信息同步、主页 IP 属地检测、老粉计划检测等功能，适用于批量管理关注列表。
+// @version      1.1.1
+// @description  B站关注管理，支持批量取关、分组管理、信息同步、主页 IP 属地检测、老粉计划检测（主页自动采集，避免接口风控）等功能，适用于批量管理关注列表。
 // @author       苡淞
 // @match        https://space.bilibili.com/*/relation/follow*
 // @match        https://space.bilibili.com/*/fans/follow*
+// @match        https://space.bilibili.com/*
 // @grant        GM_xmlhttpRequest
 // @grant        GM_addStyle
+// @grant        unsafeWindow
+// @run-at       document-start
 // @connect      api.bilibili.com
 // @connect      app.bilibili.com
 // @connect      passport.bilibili.com
@@ -35,6 +38,68 @@
     const APP_UA='Mozilla/5.0 BiliDroid/6.72.0 (bbcallen@gmail.com) os/android model/XQ-CT72 mobi_app/android build/6720300 channel/bilih5 innerVer/6720310 osVer/12 network/2';
     const genBuvid=()=>{const h=md5(Math.random().toString()).toUpperCase();return 'XX'+h[2]+h[12]+h[22]+h;};
     const signParam=(params,sec)=>{const ts=Math.floor(Date.now()/1000);const s=`${params}&ts=${ts}`.split('&').sort().join('&');return `${s}&sign=${md5(s+sec)}`;};
+
+    // ===== 老粉计划采集 =====
+    // acc/info 有 gaia 风控：脚本自己批量直连基本必 -352（补齐 Referer/Origin/buvid 也一样）。
+    // 参考「老粉计划检测器」的做法：不自己请求，而是钩住空间页自己的 acc/info 响应，采集到共享缓存。
+    const OLD_FAN_URL='/x/space/wbi/acc/info';
+    const OLD_FAN_CACHE_KEY='BiliFollowManageOldFanCache';
+    const PAGE_W=(typeof unsafeWindow!=='undefined'&&unsafeWindow)||window;
+
+    const readOldFanCache=()=>{try{return JSON.parse(localStorage.getItem(OLD_FAN_CACHE_KEY))||{};}catch(e){return {};}};
+    const writeOldFanCache=(mid,data)=>{
+        try{
+            const cache=readOldFanCache();
+            cache[mid]={follow:!!data.follow,display:!!data.display,at:Date.now()};
+            const keys=Object.keys(cache);
+            if(keys.length>3000){
+                keys.sort((a,b)=>(cache[a].at||0)-(cache[b].at||0)).slice(0,keys.length-3000).forEach(k=>delete cache[k]);
+            }
+            localStorage.setItem(OLD_FAN_CACHE_KEY,JSON.stringify(cache));
+        }catch(e){}
+    };
+    const captureOldFan=(json)=>{
+        try{
+            if(!json||json.code!==0)return;
+            const c=json.data&&json.data.contract;
+            const mid=json.data&&json.data.mid;
+            if(!c||!mid)return;
+            writeOldFanCache(mid,{follow:c.is_follow_display===true,display:c.is_display===true});
+            if(typeof PAGE_W.__BM_CAPTURE_HOOK__==='function'){
+                try{PAGE_W.__BM_CAPTURE_HOOK__(mid);}catch(e){}
+            }
+        }catch(e){}
+    };
+    const isOldFanUrl=(url)=>String(url||'').includes(OLD_FAN_URL);
+    // fetch 钩子（不消费原响应：clone 后再 parse）
+    try{
+        const nativeFetch=PAGE_W.fetch;
+        if(typeof nativeFetch==='function'){
+            PAGE_W.fetch=function(...args){
+                const url=typeof args[0]==='string'?args[0]:((args[0]&&args[0].url)||'');
+                const p=nativeFetch.apply(this,args);
+                if(isOldFanUrl(url)&&p&&typeof p.then==='function'){
+                    p.then(r=>{try{r.clone().json().then(captureOldFan).catch(()=>{});}catch(e){}}).catch(()=>{});
+                }
+                return p;
+            };
+        }
+    }catch(e){}
+    // XHR 钩子
+    try{
+        const XHR=PAGE_W.XMLHttpRequest;
+        if(XHR&&XHR.prototype&&!XHR.prototype.__bmHooked){
+            const open=XHR.prototype.open,send=XHR.prototype.send;
+            XHR.prototype.open=function(method,url,...rest){this.__bmUrl=String(url||'');return open.call(this,method,url,...rest);};
+            XHR.prototype.send=function(...args){
+                if(isOldFanUrl(this.__bmUrl)){
+                    this.addEventListener('load',()=>{try{captureOldFan(JSON.parse(this.responseText));}catch(e){}});
+                }
+                return send.apply(this,args);
+            };
+            XHR.prototype.__bmHooked=true;
+        }
+    }catch(e){}
 
     GM_addStyle(`
         :root{--b-blue:#00aeec;--b-blue-hover:#00a1d6;--b-red:#ff4d4f;--b-bg-body:#ffffff;--b-bg-hover:#e3f5ff;--b-border:#e3e5e7;--b-radius:6px;}
@@ -121,12 +186,52 @@
             };
             this.uid = window.location.pathname.match(/space\/(\d+)/)?.[1] || document.cookie.match(/DedeUserID=(\d+)/)?.[1];
             this.db = null;
+            // 空间页捕获到 acc/info 后，实时把结果刷到面板行内
+            try {
+                PAGE_W.__BM_CAPTURE_HOOK__ = (mid) => this.updateOldFanRow(mid);
+            } catch (e) {}
             const btn = CE('button', 'bm-btn-entry');
             btn.textContent = '关注管理';
             btn.onclick = () => this.show();
             document.body.appendChild(btn);
             this.initDB();
             this.loadSettings();
+            // 从用户主页切回来时自动合并新采集到的结果
+            window.addEventListener('focus', () => {
+                if (this.ui && this.ui.style.display !== 'none') this.applyOldFanCache();
+            });
+        }
+
+        updateOldFanRow(mid) {
+            const cache = readOldFanCache();
+            const c = cache[mid];
+            const u = this.state.list.find(x => x.uid === mid);
+            if (!c || !u) return;
+            if (u.oldFanChecked && (u.oldFanAt || 0) >= c.at) return;
+            u.oldFan = c.follow; u.oldFanDisplay = c.display;
+            u.oldFanChecked = true; u.oldFanAt = c.at;
+            this.updateDBItem(u).catch(() => {});
+            if (this.ui) this.setRowTags(u);
+            if (this.ui && this.ui.style.display !== 'none') this.render();
+        }
+
+        applyOldFanCache() {
+            const cache = readOldFanCache();
+            let changed = 0;
+            this.state.list.forEach(u => {
+                const c = cache[u.uid];
+                if (!c) return;
+                if (u.oldFanChecked && (u.oldFanAt || 0) >= c.at) return;
+                u.oldFan = c.follow; u.oldFanDisplay = c.display;
+                u.oldFanChecked = true; u.oldFanAt = c.at;
+                changed++;
+                this.updateDBItem(u).catch(() => {});
+            });
+            if (changed) {
+                if (this.ui) this.render();
+                this.saveDB().catch(() => {});
+            }
+            return changed;
         }
 
         initDB() {
@@ -425,6 +530,7 @@
             this.ui.style.display = 'flex';
             this.updateAuthLabel();
             await this.loadDB();
+            this.applyOldFanCache();
             this.loadGroups();
             this.syncData();
         }
@@ -800,23 +906,30 @@
             return loc?.title || '';
         }
 
-        /** 网页接口重试（-352/-799 退避 2 次） */
-        async reqRetry(url, retry = 2) {
-            try { return await this.req(url); }
-            catch (e) {
-                if (retry > 0 && (e?.code === -352 || e?.code === -799)) {
-                    await new Promise(r => setTimeout(r, 1500 * (3 - retry)));
-                    return this.reqRetry(url, retry - 1);
-                }
-                throw e;
+        /**
+         * 优先走页面上下文 fetch（同源带完整 Cookie/Referer，比 GM 请求更接近页面自身请求）；
+         * fetch 不可用（TypeError/CORS）时回退 GM 请求。业务错误码直接抛出，不重复请求。
+         */
+        async webJson(url) {
+            const W = PAGE_W;
+            if (W && typeof W.fetch === 'function') {
+                let res;
+                try { res = await W.fetch(url, { credentials: 'include' }); }
+                catch (e) { return this.req(url); }
+                let j;
+                try { j = await res.json(); }
+                catch (e) { throw { code: res && res.status === 412 ? -412 : -1, message: `HTTP ${res && res.status}` }; }
+                if (j && (j.code === 0 || j.code === 22003)) return j;
+                throw j;
             }
+            return this.req(url);
         }
 
         /** 老粉计划：x/space/wbi/acc/info 的 data.contract（网页端 token 传空串） */
         async fetchOldFan(uid) {
             const q = encWbi({ mid: uid, token: '', platform: 'web', web_location: 1550101 }, this.state.wbi.ik, this.state.wbi.sk);
-            const { data } = await this.reqRetry(`https://api.bilibili.com/x/space/wbi/acc/info?${q}`);
-            const contract = data?.contract;
+            const j = await this.webJson(`https://api.bilibili.com/x/space/wbi/acc/info?${q}`);
+            const contract = j.data?.contract;
             if (!contract) throw { code: -1, message: '响应缺少 contract 数据' };
             return { follow: contract.is_follow_display === true, display: contract.is_display === true };
         }
@@ -1008,13 +1121,24 @@
                     if (!items.length) { alert('关注列表已更新，请重新检测'); return; }
                 }
                 this._ipAbort = '';
+                if (isOld) {
+                    // 先用主页采集到的缓存（无风控），只对还没采集的人尝试请求
+                    const cachedCount = this.applyOldFanCache();
+                    const before = items.length;
+                    items = items.filter(u => !u.oldFanChecked);
+                    if (!items.length) {
+                        this.toast(`这 ${before} 人已有主页采集结果（本次合并 ${cachedCount} 条），无需请求`);
+                        return;
+                    }
+                }
                 b.textContent = '停止'; b.classList.add('processing');
                 const delayMs = isIp ? Math.max(this.settings.shortDelay, 800)
-                    : (isOld ? Math.max(this.settings.shortDelay, 600)
+                    : (isOld ? Math.max(this.settings.shortDelay, 2500)
                     : (type === 'fans' ? this.settings.shortDelay : this.settings.longDelay));
-                const conc = (isIp || isOld) ? 2 : 5;
+                const conc = isIp ? 2 : (isOld ? 1 : 5);
                 const st = Q('#bm-st');
                 let completed = 0, failed = 0, hits = 0;
+                this._oldFanBlocked = 0;
                 if (!isIp) await this.getWbi();
                 const updateProgress = (err) => {
                     completed++; if (err) failed++;
@@ -1080,6 +1204,11 @@
                             this.setRowTags(cur); err = null;
                             this.updateDBItem(cur).catch(() => {});
                         }
+                        // 老粉计划：风控不重试（重试只会加重），直接熔断整批
+                        if (isOld && [-352, -401, -403, -412, -799].includes(e?.code)) {
+                            this._oldFanBlocked = e.code;
+                            this.state.stop = true;
+                        }
                     }
                     updateProgress(err);
                 });
@@ -1091,7 +1220,9 @@
                         const task = queue.shift();
                         const promise = task().finally(() => executing.delete(promise));
                         executing.add(promise);
-                        if (delayMs > 0) await new Promise(r => setTimeout(r, delayMs));
+                        // 老粉计划：慢速 + 抖动，避免批量请求触发风控
+                        const waitMs = isOld ? Math.round(delayMs * (0.8 + Math.random() * 0.6)) : delayMs;
+                        if (waitMs > 0) await new Promise(r => setTimeout(r, waitMs));
                     }
                     if (executing.size > 0) await Promise.race(executing);
                     // canary：每 25 人用批次 key 打一次需要登录的接口，防止服务端中途把 key 降级为匿名
@@ -1115,6 +1246,13 @@
                         : `更新完成 ${completed} 人`);
                 if (isIp && !isStopped && failed === 0 && hits === 0 && items.length >= 5) {
                     alert('本次检测没有取到任何 IP 属地。\n\n若这些用户主页本应显示属地，可能是 access_key 未生效（假/过期 key 同样返回 code:0）。建议点「IP授权」重新授权后再试。');
+                }
+                if (isOld && this._oldFanBlocked) {
+                    const blockedCode = this._oldFanBlocked;
+                    this._oldFanBlocked = 0;
+                    alert('老粉计划接口触发风控（' + blockedCode + '），已中止，未检测的用户保持「未检测」。\n\n'
+                        + '推荐做法：逐个打开这些用户的主页（脚本会在主页自动采集），然后回到面板点「老粉计划」合并结果；'
+                        + '也可以稍后再试，或先缩小检测范围。');
                 }
                 if (this._keyInvalid) {
                     this._keyInvalid = false;
@@ -1192,12 +1330,26 @@
             st.textContent = '完成'; this.render();
         }
     }
-    const __bmApp = new App();
-    try {
-        // 只在测试/探针（jsdom 里会先设 __BM_TEST__）下暴露实例：settings 里有 access_key，不挂到页面 window
-        if (window.__BM_TEST__) {
-            window.__BM_APP = __bmApp;
-            window.__BM_DEBUG = { signParam, APP_KEY, APP_SEC, LOGIN_APP_KEY, LOGIN_APP_SEC, APP_BUILD, APP_UA };
-        }
-    } catch (e) {}
+
+    // @run-at document-start：采集钩子立即装；面板等 DOM 就绪再建（且只在关注/粉丝页建）
+    const initPanel = () => {
+        try {
+            const app = new App();
+            try {
+                // 只在测试/探针（jsdom 里会先设 __BM_TEST__）下暴露实例：settings 里有 access_key，不挂到页面 window
+                if (window.__BM_TEST__) {
+                    window.__BM_APP = app;
+                    window.__BM_DEBUG = { signParam, APP_KEY, APP_SEC, LOGIN_APP_KEY, LOGIN_APP_SEC, APP_BUILD, APP_UA };
+                }
+            } catch (e) {}
+        } catch (e) { console.error('[BiliFollowManage] 初始化失败', e); }
+    };
+    const isPanelPage = () => /\/relation\/follow|\/fans\/follow/.test(location.pathname);
+    if (isPanelPage()) {
+        if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', initPanel, { once: true });
+        else initPanel();
+    } else if (window.__BM_TEST__) {
+        // 测试/探针需要在空间主页上也能拿到实例来验证采集钩子
+        initPanel();
+    }
 })();
