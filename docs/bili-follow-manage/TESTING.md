@@ -8,7 +8,7 @@
 | 项目 | 命令 | 结果 |
 | --- | --- | --- |
 | 语法 | `node --check BilibiliFollowManage.js` | ✅ 通过（`dist` 产物同样通过） |
-| 单测 | `npm run test:follow` | ✅ 34/34 通过（约 1 s） |
+| 单测 | `npm run test:follow` | ✅ 42/42 通过（约 1 s） |
 | 构建 | `npm run build:follow` | ✅ 产出 66331 字节，仅多两行发布地址 |
 | 探针 A–D | §4 | ✅ 4/4 通过（`node scripts/probe-app-api.mjs`） |
 | 手动验收 | `MANUAL-TEST.md` | ⏳ 待用户执行 |
@@ -42,15 +42,15 @@ Compare-Object (Get-Content 'BilibiliFollowManage.js') (Get-Content $out)
 
 预期：产物存在；头部 `@version` 为 `1.0.1`；`Compare-Object` 只有 `@downloadURL`、`@updateURL` 两条 `=>`。
 
-单测覆盖（`test/follow-manage/`，34 项）：
+单测覆盖（`test/follow-manage/`，42 项）：
 
 | 文件 | 用例 | 关键断言 |
 | --- | --- | --- |
 | `dropdown.test.mjs`（4） | 状态下拉含 `ip`、chip 文案、旧选项不变、按钮/授权入口存在 | `option[value=ip]` 文案「IP属地」；chip「有IP属地/无IP属地」 |
 | `filter.test.mjs`（3） | 有/无/未检测三态、叠加其它条件、搜索叠加 | 未检测两边都不匹配 |
 | `tags.test.mjs`（4） | 行内 `IP:xx`、`setRowTags` 局部刷新、互关/原始粉丝/分组保留 | 无值时不出 IP 标签 |
-| `detect-ip.test.mjs`（9） | 批量写入/落库、`-352`/`-799` 重试、`-101` 中止、`-404` 记无 IP、网络错误不写 `ipChecked`、选中优先、拒绝授权、`parse` 补字段 | 进度与失败计数写入 `#bm-st` |
-| `access-key.test.mjs`（11） | 解析裸串/JSON/片段、校验（location/`-101`/正常/unknown）、手动粘贴成功/失败、TV 授权成功/失败、清除、已授权不弹窗 | 假 key 不会被判为有效 |
+| `detect-ip.test.mjs`（14） | 批量写入/落库、`-352`/`-799` 重试、`-101` 中止、`-404` 记无 IP、网络错误不写、缺 `card` 记失败、选中优先、拒绝授权、unknown 授权门、批次内 key 变更、**点真实按钮**回归、`act` 路由、`parse` 补字段 | 点按钮绝不能走关注/取关；每条请求必须带原 key |
+| `access-key.test.mjs`（14） | 解析裸串/JSON/片段、校验（location/`-101`/正常/unknown）、手动粘贴成功/失败/unknown 确认与拒绝、TV 授权成功/失败/unknown 拒绝、清除、已授权不弹窗 | 假 key 不会被判为有效；unknown 不静默放行 |
 | `sync.test.mjs`（3） | 同步保留 `ip/ipChecked/ipAt`、不串旧数据、`attribute=6`/`face` 处理 | — |
 
 桩要求：jsdom 启动脚本；`GM_addStyle` 空实现；`GM_xmlhttpRequest` 可控返回；`indexedDB` 用内存实现；`alert/confirm/prompt` 记录调用；`setTimeout` 立即执行（避免真实等待 800 ms）。

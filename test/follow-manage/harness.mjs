@@ -14,6 +14,15 @@ export const SOURCE = readFileSync(SOURCE_PATH, 'utf8')
 
 export const sleep = (ms = 0) => new Promise((r) => setImmediate(r))
 
+/** 轮询等待条件成立（用 setImmediate 推进，不用真实定时器） */
+export async function waitFor(predicate, { tries = 400 } = {}) {
+  for (let i = 0; i < tries; i++) {
+    if (predicate()) return true
+    await new Promise((r) => setImmediate(r))
+  }
+  return false
+}
+
 export function createFakeIDB() {
   const stores = new Map()
   const storeOf = (name) => {

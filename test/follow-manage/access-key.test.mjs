@@ -69,13 +69,51 @@ test('手动粘贴：校验通过后保存来源为 manual', async () => {
   assert.match(window.document.querySelector('#bm-ip-auth').textContent, /已授权/)
 })
 
-test('手动粘贴：校验失败不保存', async () => {
+test('手动粘贴：校验失败（-101）不保存', async () => {
   const routes = [
     { match: 'app.bilibili.com/x/v2/space', respond: () => spaceTag('') },
     { match: 'app.bilibili.com/x/v2/history', respond: () => ({ code: -101 }) },
   ]
   const { app } = boot({ routes, confirmQueue: [true], promptQueue: [KEY] })
   open(app)
+  assert.equal(await app.ensureAccessKey(), false)
+  assert.equal(app.settings.accessKey, '')
+})
+
+test('手动粘贴：unknown 时确认继续才保存', async () => {
+  const routes = [
+    { match: 'app.bilibili.com/x/v2/space', respond: () => spaceTag('') },
+    { match: 'app.bilibili.com/x/v2/history', respond: () => ({ code: -400, message: '请求错误' }) },
+  ]
+  const { app } = boot({ routes, confirmQueue: [true, true], promptQueue: [KEY] })
+  open(app)
+  assert.equal(await app.ensureAccessKey(), true)
+  assert.equal(app.settings.accessKey, KEY)
+})
+
+test('手动粘贴：unknown 时拒绝则不保存', async () => {
+  const routes = [
+    { match: 'app.bilibili.com/x/v2/space', respond: () => spaceTag('') },
+    { match: 'app.bilibili.com/x/v2/history', respond: () => ({ code: -400, message: '请求错误' }) },
+  ]
+  const { app } = boot({ routes, confirmQueue: [true, false], promptQueue: [KEY] })
+  open(app)
+  assert.equal(await app.ensureAccessKey(), false)
+  assert.equal(app.settings.accessKey, '')
+})
+
+test('自动授权：unknown 时拒绝则报错且不保存', async () => {
+  const routes = [
+    { match: 'passport.bilibili.com/x/passport-tv-login/qrcode/auth_code', respond: () => ({ code: 0, data: { auth_code: 'AC' } }) },
+    { match: 'passport.bilibili.com/x/passport-tv-login/h5/qrcode/confirm', respond: () => ({ code: 0, data: {} }) },
+    { match: 'passport.bilibili.com/x/passport-tv-login/qrcode/poll', respond: () => ({ code: 0, data: { access_token: 'TOKEN-X' } }) },
+    { match: 'app.bilibili.com/x/v2/space', respond: () => spaceTag('') },
+    { match: 'app.bilibili.com/x/v2/history', respond: () => ({ code: -400, message: '请求错误' }) },
+  ]
+  // confirm 依次：引导弹窗 false（走自动授权）→ 自动授权确认 true → unknown 门 false
+  const { app, window } = boot({ routes, confirmQueue: [false, true, false] })
+  open(app)
+  window.document.cookie = 'bili_jct=csrf123'
   assert.equal(await app.ensureAccessKey(), false)
   assert.equal(app.settings.accessKey, '')
 })

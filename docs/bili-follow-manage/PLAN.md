@@ -203,7 +203,9 @@ Git 约定：
 | 项 | 结果 |
 | --- | --- |
 | 语法 `node --check` | 通过（源文件与 `dist` 产物均通过） |
-| 单测 `npm run test:follow` | **34 项全绿**（dropdown 4 / filter 3 / tags 4 / detect-ip 9 / access-key 11 / sync 3，含网络错误与旧库字段补齐） |
+| 单测 `npm run test:follow` | **42 项全绿**（dropdown 4 / filter 3 / tags 4 / detect-ip 14 / access-key 14 / sync 3）；含「点真实按钮」回归、unknown 授权门、批次内 key 变更、缺 `card` 失败等 |
+| 审查回归（P0） | 修复 `act()` 只路由 `fetch-fans/fetch-dyn` 导致「IP属地」按钮落进关注/取关分支：改为 `t.startsWith('fetch-')`；补点击级测试断言不发起 `x/relation/*modify` |
+| 审查回归（P1） | 批次内固定 `scanKey` 且中途变更即停；`manageAccessKey` 加 `busy` 守卫；`unknown` 授权不再静默放行（改为确认门）；`data.card` 缺失按失败处理 |
 | 构建 `npm run build:follow` | 产出 `dist/BiliBili 关注管理-1.0.1.user.js`（66331 字节），仅多 `@downloadURL/@updateURL` 两行 |
 | 真实探针 `node scripts/probe-app-api.mjs` | **4/4 通过**：匿名 `x/v2/space` `code:0`；脚本 `fetchIpLocation` 解析正常且无 location；假 key 同样无 location（证明返回码不可信）；passport `auth_code` `code:0` |
 | 手动验收 | 待用户按 `MANUAL-TEST.md` 执行 |

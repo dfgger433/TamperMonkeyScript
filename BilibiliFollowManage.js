@@ -662,7 +662,8 @@
         }
 
         async act(t, op) {
-            if (['fetch-fans', 'fetch-dyn'].includes(t)) return this.fetchInfo(t.split('-')[1]);
+            // fetch-fans / fetch-dyn / fetch-ip → fetchInfo('fans'|'dyn'|'ip')
+            if (t.startsWith('fetch-')) return this.fetchInfo(t.slice('fetch-'.length));
             if (this.state.busy) return;
             if (t === 'exp') {
                 const s = this.state.selected.size ? Array.from(this.state.selected).map(m => this.state.list.find(x => x.uid===m)).filter(x=>x) : this.state.list;
@@ -743,7 +744,9 @@
             const ak = key === undefined ? (this.settings.accessKey || '') : key;
             const q = signParam(`access_key=${ak}&appkey=${APP_KEY}&build=${APP_BUILD}&mobi_app=android&platform=android&vmid=${uid}`, APP_SEC);
             const j = await this.appReq(`https://app.bilibili.com/x/v2/space?${q}`);
-            const card = j.data?.card || {};
+            const card = j.data?.card;
+            // 没有 card 就不能当成"无 IP"（接口形态变了/参数不对时要显式失败，避免静默写坏数据）
+            if (!card) throw { code: -1, message: '响应缺少 card 数据' };
             const tags = [...(card.space_tag || []), ...(card.space_tag_bottom || [])];
             const loc = tags.find(t => t && t.type === 'location');
             return loc?.title || '';
@@ -841,8 +844,9 @@
                 if (!key) { alert('没有识别到 access_key'); return false; }
                 const state = await this.validateAccessKey(key);
                 if (state === false) { alert('access_key 校验失败（可能已过期或复制不完整），请重新获取。'); return false; }
+                if (state === 'unknown' && !confirm('无法验证该 access_key（接口异常或本人主页无属地）。\n\n继续可能把看不到属地的用户误记为「无 IP」。\n\n仍要使用吗？')) return false;
                 this.setAccessKey(key, 'manual');
-                if (state === 'unknown') alert('已保存 access_key，但暂时无法验证。若检测结果全是“无 IP”，请重新获取授权。');
+                if (state === 'unknown') this.toast('已保存 access_key（未能验证）');
                 else this.toast('access_key 可用');
                 return true;
             }
@@ -853,6 +857,9 @@
                 if (!token) throw { code: -1, message: '授权返回为空' };
                 const state = await this.validateAccessKey(token);
                 if (state === false) throw { code: -1, message: '授权得到的 access_key 不可用' };
+                if (state === 'unknown' && !confirm('授权已拿到，但无法验证（接口异常或本人主页无属地）。\n\n继续可能把看不到属地的用户误记为「无 IP」。\n\n仍要使用吗？')) {
+                    throw { code: -1, message: '未能验证授权，已取消' };
+                }
                 this.setAccessKey(token, 'tv');
                 alert('access_key 获取成功。若网页端出现掉线，请重新登录后继续。');
                 return true;
@@ -863,6 +870,7 @@
         }
 
         async manageAccessKey() {
+            if (this.state.busy) { this.toast('正在检测/操作中，结束或停止后再改授权'); return; }
             if (this.settings.accessKey) {
                 const state = await this.validateAccessKey(this.settings.accessKey);
                 const src = this.settings.accessKeySrc === 'tv' ? '自动获取' : '手动粘贴';
@@ -883,7 +891,10 @@
             if (this.settings.accessKey) {
                 const state = await this.validateAccessKey(this.settings.accessKey);
                 if (state === true) return true;
-                if (state === 'unknown') { this.toast('access_key 无法验证，继续尝试'); return true; }
+                if (state === 'unknown') {
+                    // 不能静默放行：假/失效 key 同样 code 0，继续跑会把所有人写成"无 IP"
+                    return confirm('无法验证 access_key（接口异常或本人主页无属地）。\n\n继续检测可能把看不到属地的用户误记为「无 IP」。\n\n仍要继续吗？');
+                }
                 this.settings.accessKey = '';
                 this.settings.accessKeySrc = '';
                 this.saveSettings(); this.updateAuthLabel();
@@ -899,6 +910,10 @@
             if (!items.length) return alert('列表为空');
             const isIp = type === 'ip';
             if (isIp && !(await this.ensureAccessKey())) return;
+            // 批次内固定用这一个 key：中途被清/改就立即停，免得用空 key 把所有人写成“无 IP”
+            const scanKey = isIp ? (this.settings.accessKey || '') : '';
+            if (isIp && !scanKey) { alert('没有可用的 access_key'); return; }
+            this._ipAbort = '';
             this.state.busy = true; this.state.stop = false;
             const delayMs = isIp ? Math.max(this.settings.shortDelay, 800)
                 : (type === 'fans' ? this.settings.shortDelay : this.settings.longDelay);
@@ -915,6 +930,11 @@
             };
             const tasks = items.map(u => async () => {
                 if (this.state.stop || this.ui.style.display === 'none' || !this.state.list.includes(u)) return;
+                if (isIp && this.settings.accessKey !== scanKey) {
+                    this._ipAbort = 'changed';
+                    this.state.stop = true;
+                    return;
+                }
                 let err = null;
                 try {
                     if (type === 'fans') {
@@ -937,7 +957,7 @@
                         const c_d = Q(`tr[data-mid="${u.uid}"]`)?.cells[3];
                         if (c_d) c_d.textContent = u.dynamicTime ? new Date(u.dynamicTime * 1000).toISOString().split('T')[0] : '-';
                     } else if (isIp) {
-                        u.ip = await this.fetchIpLocation(u.uid);
+                        u.ip = await this.fetchIpLocation(u.uid, scanKey);
                         u.ipChecked = true; u.ipAt = Date.now();
                         this.setRowTags(u);
                     }
@@ -986,7 +1006,10 @@
                 this.saveSettings();
                 this.updateAuthLabel();
                 alert('access_key 已失效，检测已中止。请点「IP授权」重新授权后再试。');
+            } else if (this._ipAbort === 'changed') {
+                this.toast('授权已变更，IP 检测已停止');
             }
+            this._ipAbort = '';
         }
 
         async modRel(items, act) {

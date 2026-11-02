@@ -107,10 +107,12 @@
 - [x] 用例：dropdown（4）
 - [x] 用例：filter（3）
 - [x] 用例：tags（4）
-- [x] 用例：detect-ip（9）
-- [x] 用例：access-key（11）
+- [x] 用例：detect-ip（14）
+- [x] 用例：access-key（14）
 - [x] 用例：sync（3）
-- [x] `npm run test:follow` 全绿（34/34）
+- [x] `npm run test:follow` 全绿（42/42）
+- [x] 审查修复（P0）：`act()` 用 `startsWith('fetch-')` 路由，补「点真实按钮」回归测试，断言不发起 `x/relation/*modify`
+- [x] 审查修复（P1）：批次内固定 `scanKey` 且变更即停；`manageAccessKey` 加 `busy` 守卫；`unknown` 改确认门；缺 `card` 记失败
 - [x] `npm run build:follow` 产物校验（版本、两行、`node --check` 通过）
 - [x] 新增 `scripts/probe-app-api.mjs`，真实探针 4/4（`TESTING.md` §4 已记录日期）
 

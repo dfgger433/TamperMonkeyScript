@@ -43,7 +43,7 @@
 
 | 步骤 | 操作 | 预期结果 | 失败时看哪里 |
 | --- | --- | --- | --- |
-| 4.1 | 选中 3–5 人，点「IP属地」 | 按钮变「停止」；`#bm-st` 显示 `n / total` | Network 过滤 `app.bilibili.com`；按钮 disabled |
+| 4.1 | 选中 3–5 人，点「IP属地」 | 按钮变「停止」；`#bm-st` 显示 `n / total`；**不能弹出「确定取关/关注 N 人」（旧 bug 回归点）** | Network 过滤 `app.bilibili.com`；按钮 disabled；是否误弹关注/取关确认 |
 | 4.2 | 等待完成 | 有属地的行出现 `IP:上海` 类标签，文本非空、格式合理（网页主页本身不显示属地，不能拿主页对照；可对照 BiliRevealForSpace） | 行内 `.bm-tags`；Console；接口 `space_tag` |
 | 4.3 | 观察无属地/隐藏属地用户 | 不显示 IP 标签；筛选里算「无IP属地」 | `ipChecked` 是否为 true；是否被网络错误误写 |
 | 4.4 | 未检测用户 | 无 IP 标签，筛选「有/无」都不出现 | `ipChecked` 默认值；parse 是否补字段 |

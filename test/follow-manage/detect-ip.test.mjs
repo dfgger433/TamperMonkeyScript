@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { boot, open, makeUser, readDB, spaceTag, NETWORK_ERROR } from './harness.mjs'
+import { boot, open, makeUser, readDB, spaceTag, NETWORK_ERROR, waitFor } from './harness.mjs'
 
 const OK_KEY = 'k'.repeat(32)
 
@@ -166,6 +166,101 @@ test('parse() 为未检测用户补默认字段', () => {
   assert.equal(u.ip, '')
   assert.equal(u.ipChecked, false)
   assert.equal(u.ipAt, 0)
+})
+
+test('act() 的 fetch-* 路由：fans / dyn / ip 都进 fetchInfo', async () => {
+  const { app } = boot()
+  open(app)
+  const seen = []
+  app.fetchInfo = async (t) => { seen.push(t) }
+  await app.act('fetch-fans')
+  await app.act('fetch-dyn')
+  await app.act('fetch-ip')
+  assert.deepEqual(seen, ['fans', 'dyn', 'ip'])
+})
+
+test('点击「IP属地」按钮真的走检测（回归：曾误入关注/取关分支）', async () => {
+  const routes = routesWith((url) => {
+    const vmid = /vmid=(\d+)/.exec(url)?.[1]
+    return vmid === '1' ? spaceTag('江苏') : spaceTag('上海')
+  })
+  const { app, window, log } = boot({ routes, settings: { accessKey: OK_KEY } })
+  open(app)
+  app.state.list = [makeUser({ uid: 1, name: '甲' })]
+  app.render()
+  app.state.selected = new Set([1]) // 旧 bug 下会走 confirm + batch/modify
+
+  const calls = []
+  const original = app.fetchInfo.bind(app)
+  app.fetchInfo = (t) => { calls.push(t); return original(t) }
+
+  window.document.querySelector('#bm-btn-fetch-ip').click()
+  assert.ok(await waitFor(() => calls.length > 0 && app.state.busy === false && app.state.list[0].ipChecked), '检测没有跑起来/没写结果')
+
+  assert.deepEqual(calls, ['ip'])
+  assert.equal(app.state.list[0].ip, '江苏')
+  assert.ok(!log.requests.some((r) => /x\/relation\/(batch\/)?modify/.test(r.url)), '绝不能发起关注/取关请求')
+  assert.ok(!log.confirms.some((m) => /取关|关注 \d/.test(m)), '不能弹关注/取关确认')
+})
+
+test('无法验证 key（unknown）时拒绝继续：不发检测请求、不清 key', async () => {
+  const routes = [
+    { match: 'app.bilibili.com/x/v2/space', respond: () => spaceTag('') },
+    { match: 'app.bilibili.com/x/v2/history', respond: () => ({ code: -400, message: '请求错误' }) },
+  ]
+  const { app, log } = boot({ routes, settings: { accessKey: OK_KEY }, confirmQueue: [false] })
+  open(app)
+  app.state.list = [makeUser({ uid: 1 })]
+  app.render()
+
+  await app.fetchInfo('ip')
+
+  assert.equal(app.state.list[0].ipChecked, false)
+  assert.equal(log.requests.filter((r) => /vmid=1\b/.test(r.url)).length, 0, '拒绝后不能发起检测')
+  assert.equal(app.settings.accessKey, OK_KEY, '只是无法验证，不应清掉 key')
+  assert.ok(log.confirms.some((m) => m.includes('无 IP')), '应提示误判风险')
+})
+
+test('检测中途 key 被清：后续任务停止，且请求始终带批次开始时的 key', async () => {
+  let appRef
+  let first = true
+  const seenKeys = []
+  const routes = routesWith((url) => {
+    const vmid = /vmid=(\d+)/.exec(url)?.[1]
+    if (vmid === '888') return spaceTag('上海')
+    seenKeys.push(/access_key=([^&]*)/.exec(url)?.[1])
+    if (first) { first = false; appRef.settings.accessKey = ''; return spaceTag('四川') }
+    return spaceTag('北京')
+  })
+  const { app } = boot({ routes, settings: { accessKey: OK_KEY } })
+  appRef = app
+  open(app)
+  app.state.list = [1, 2, 3].map((uid) => makeUser({ uid, name: 'u' + uid }))
+  app.render()
+
+  await app.fetchInfo('ip')
+
+  assert.ok(seenKeys.length >= 1)
+  assert.ok(seenKeys.every((k) => k === OK_KEY), '每条请求都必须带原 key，不能用空 key')
+  assert.equal(app.state.list[0].ip, '四川')
+  assert.equal(app.state.list[2].ipChecked, false, 'key 变更后排队中的任务不能再写')
+})
+
+test('响应缺少 card 时按失败处理，不写成「无 IP」', async () => {
+  const routes = routesWith((url) => {
+    const vmid = /vmid=(\d+)/.exec(url)?.[1]
+    if (vmid === '4') return { code: 0, message: 'OK', data: {} }
+    return spaceTag('上海')
+  })
+  const { app, document } = boot({ routes, settings: { accessKey: OK_KEY } })
+  open(app)
+  app.state.list = [makeUser({ uid: 4 })]
+  app.render()
+
+  await app.fetchInfo('ip')
+
+  assert.equal(app.state.list[0].ipChecked, false)
+  assert.match(document.querySelector('#bm-st').textContent, /失败 1/)
 })
 
 test('parse() 对已解析/旧库对象也补齐 IP 字段', () => {
