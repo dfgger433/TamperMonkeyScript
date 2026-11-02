@@ -1,6 +1,6 @@
 # 测试指南 · IP 属地检测
 
-> 阶段 1 已在本机执行：语法 / 单测（34 项）/ 构建 / 真实探针（4 项）均通过；手动验收待用户在浏览器执行，见 `MANUAL-TEST.md`。
+> 阶段 1 已在本机执行：语法 / 单测（42 项）/ 构建 / 真实探针（4 项）均通过；手动验收待用户在浏览器执行，见 `MANUAL-TEST.md`。
 > 真实站点数据必须由已登录用户验证——仓库与 CI 没有 B 站 Cookie，也没有 `access_key`。
 
 ## 1. 状态（2026-11-02）
@@ -9,7 +9,7 @@
 | --- | --- | --- |
 | 语法 | `node --check BilibiliFollowManage.js` | ✅ 通过（`dist` 产物同样通过） |
 | 单测 | `npm run test:follow` | ✅ 42/42 通过（约 1 s） |
-| 构建 | `npm run build:follow` | ✅ 产出 66331 字节，仅多两行发布地址 |
+| 构建 | `npm run build:follow` | ✅ 产出 68586 字节（1.0.2），仅多两行发布地址 |
 | 探针 A–D | §4 | ✅ 4/4 通过（`node scripts/probe-app-api.mjs`） |
 | 手动验收 | `MANUAL-TEST.md` | ⏳ 待用户执行 |
 
@@ -40,7 +40,7 @@ Get-Content $out -TotalCount 16
 Compare-Object (Get-Content 'BilibiliFollowManage.js') (Get-Content $out)
 ```
 
-预期：产物存在；头部 `@version` 为 `1.0.1`；`Compare-Object` 只有 `@downloadURL`、`@updateURL` 两条 `=>`。
+预期：产物存在；头部 `@version` 为 `1.0.2`；`Compare-Object` 只有 `@downloadURL`、`@updateURL` 两条 `=>`。
 
 单测覆盖（`test/follow-manage/`，42 项）：
 
@@ -132,7 +132,7 @@ node scripts/probe-app-api.mjs
 | `indexedDB is not defined` | jsdom 桩缺失 | 在 setup 注入内存版 `indexedDB` |
 | 测试卡住 | `setTimeout` 真实等待 | 用假定时器立即执行 |
 | `GM_xmlhttpRequest is not defined` | 启动脚本未注入 | 在 `before` 里挂到 `globalThis` |
-| 构建找不到版本 | 头部正则不匹配 | 确认 `@version      1.0.1` 仍在首 15 行 |
+| 构建找不到版本 | 头部正则不匹配 | 确认 `@version      1.0.2` 仍在首 15 行 |
 | 产物多出差异 | 构建重复注入/换行 | 检查 `@downloadURL` 是否只出现一次 |
 | 探针非 0 | 时钟偏差/签名排序/UA/风控 | 校时；打印 `$s` 与 `$sign` 比对 |
 

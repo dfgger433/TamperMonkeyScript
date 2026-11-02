@@ -11,7 +11,7 @@
 | 数据源 | App 接口 `https://app.bilibili.com/x/v2/space` + `access_key` | 网页接口 `x/space/wbi/acc/info` 的 `data.contract` |
 | 复用 | 只复用 BiliRevealForSpace 的取数思路 | 复用现有 `encWbi` |
 | 不做 | 页面注入、悬浮菜单、独立面板、自动改主页 | 任何 UI 注入 |
-| 版本 | `1.0.1` | `1.0.2`（需用户确认后） |
+| 版本 | `1.0.2` | `1.1.0`（需用户确认后） |
 
 阶段 1 只改本脚本：状态下拉、动作按钮、授权状态、行内标签、筛选、批量检测、持久化。不新增 `@grant`，不引入第三方运行时。
 
@@ -19,14 +19,14 @@
 
 | # | 标准 | 验证方式 |
 | --- | --- | --- |
-| A1 | 头部版本 `1.0.1`，`@description` 含 IP 属地，新增 `@connect app.bilibili.com`、`@connect passport.bilibili.com`，`@grant` 仍为 `GM_xmlhttpRequest` / `GM_addStyle` | 读头部 + `node --check` |
+| A1 | 头部版本 `1.0.2`，`@description` 含 IP 属地，新增 `@connect app.bilibili.com`、`@connect passport.bilibili.com`，`@grant` 仍为 `GM_xmlhttpRequest` / `GM_addStyle` | 读头部 + `node --check` |
 | A2 | 状态下拉出现「IP属地」；动作栏出现「IP属地」按钮；子栏出现可点击的「IP授权: …」标签 | 手动打开面板 / jsdom 断言 |
 | A3 | 支持粘贴已有 `aceess_key`、校验、清除；未授权时引导获取；授权态写入 `localStorage` 的 `BiliFollowManageSettings`（`accessKey/accessKeySrc/accessKeyAt`） | 单测 + 手动 |
 | A4 | 批量检测按「选中优先，否则当前视图」执行；有属地显示 `IP:xx`，无属地记为已检测·无 IP；未检测不参与有/无筛选 | 单测 + 手动 |
 | A5 | 筛选「有IP属地 / 无IP属地」三态正确：未检测两边都不匹配；无已检测数据时提示先检测 | 单测 + 手动 |
 | A6 | 刷新、重新「同步」、导入导出后 `ip/ipChecked/ipAt` 不丢；IndexedDB 无 schema 变更 | 单测 + 刷新验证 |
-| A7 | `scripts/build-follow.mjs` 产出 `dist/BiliBili 关注管理-1.0.1.user.js`（仅多 `@downloadURL/@updateURL` 两行）；`npm run test:follow`（即 `node --test "test/follow-manage/*.test.mjs"`）全绿 | 构建 + 测试 |
-| A8 | 分支推到 fork，`main` 未动；产物拷到 `H:\资源\js脚本\bilibili.com\BiliBili 关注管理-1.0.1.user.js` 并回写 `TamperMonkeyScript-main\BilibiliFollowManage.js`；用户按 `MANUAL-TEST.md` 验收通过 | `git log` + 文件比对 + 用户签字 |
+| A7 | `scripts/build-follow.mjs` 产出 `dist/BiliBili 关注管理-1.0.2.user.js`（仅多 `@downloadURL/@updateURL` 两行）；`npm run test:follow`（即 `node --test "test/follow-manage/*.test.mjs"`）全绿 | 构建 + 测试 |
+| A8 | 分支推到 fork，`main` 未动；产物拷到 `H:\资源\js脚本\bilibili.com\BiliBili 关注管理-1.0.2.user.js` 并回写 `TamperMonkeyScript-main\BilibiliFollowManage.js`；用户按 `MANUAL-TEST.md` 验收通过 | `git log` + 文件比对 + 用户签字 |
 
 ## 3. 调研结论（摘要）
 
@@ -65,7 +65,7 @@ Git 约定：
 
 | 字段 | 改动 |
 | --- | --- |
-| `@version` | `1.0.0` → `1.0.1` |
+| `@version` | `1.0.0` → `1.0.2` |
 | `@description` | 追加「主页 IP 属地检测」 |
 | `@connect` | 新增 `app.bilibili.com`、`passport.bilibili.com`；保留 `api.bilibili.com` |
 | `@grant` | 不变（仍只有 `GM_xmlhttpRequest`、`GM_addStyle`） |
@@ -163,7 +163,7 @@ Git 约定：
 
 ### 5.10 交付
 
-构建并校验产物头部（版本、两行发布地址、字节数）→ 推送 `feat/ip-oldfan-detect` 到 `origin` → 拷贝到 `H:\资源\js脚本\bilibili.com\BiliBili 关注管理-1.0.1.user.js` → 回写 `H:\资源\js脚本\bilibili.com\TamperMonkeyScript-main\BilibiliFollowManage.js`（源文件）→ 交用户按 `MANUAL-TEST.md` 验收；**未通过不进入阶段 2**。
+构建并校验产物头部（版本、两行发布地址、字节数）→ 推送 `feat/ip-oldfan-detect` 到 `origin` → 拷贝到 `H:\资源\js脚本\bilibili.com\BiliBili 关注管理-1.0.2.user.js` → 回写 `H:\资源\js脚本\bilibili.com\TamperMonkeyScript-main\BilibiliFollowManage.js`（源文件）→ 交用户按 `MANUAL-TEST.md` 验收；**未通过不进入阶段 2**。
 
 ## 6. 测试计划
 
@@ -178,11 +178,11 @@ Git 约定：
 
 ## 7. 阶段 2（GATE，本轮不实现）
 
-前置条件：用户明确回复阶段 1 手动验收通过。未确认前不得改代码、不得升 1.0.2。
+前置条件：用户明确回复阶段 1 手动验收通过。未确认前不得改代码、不得升 1.1.0。
 
 - 下拉加 `<option value="oldfan">老粉计划</option>`，动作栏加「老粉计划」按钮。
 - `fetchInfo('oldfan')` 用现有 `encWbi` 请求 `x/space/wbi/acc/info?mid=&platform=web&web_location=1550101`，`token` 传空串，读 `data.contract.is_follow_display`。
-- 字段：`oldFan/oldFanDisplay/oldFanChecked/oldFanAt`；标签 `.t-oldfan`；筛选三态同 `ip`；版本 `1.0.2`，补单测与手动验收项。
+- 字段：`oldFan/oldFanDisplay/oldFanChecked/oldFanAt`；标签 `.t-oldfan`；筛选三态同 `ip`；版本 `1.1.0`，补单测与手动验收项。
 
 ## 8. 风险与假设
 
@@ -206,7 +206,8 @@ Git 约定：
 | 单测 `npm run test:follow` | **42 项全绿**（dropdown 4 / filter 3 / tags 4 / detect-ip 14 / access-key 14 / sync 3）；含「点真实按钮」回归、unknown 授权门、批次内 key 变更、缺 `card` 失败等 |
 | 审查回归（P0） | 修复 `act()` 只路由 `fetch-fans/fetch-dyn` 导致「IP属地」按钮落进关注/取关分支：改为 `t.startsWith('fetch-')`；补点击级测试断言不发起 `x/relation/*modify` |
 | 审查回归（P1） | 批次内固定 `scanKey` 且中途变更即停；`manageAccessKey` 加 `busy` 守卫；`unknown` 授权不再静默放行（改为确认门）；`data.card` 缺失按失败处理 |
-| 构建 `npm run build:follow` | 产出 `dist/BiliBili 关注管理-1.0.1.user.js`（66331 字节），仅多 `@downloadURL/@updateURL` 两行 |
+| 构建 `npm run build:follow` | 产出 `dist/BiliBili 关注管理-1.0.2.user.js`（68586 字节），仅多 `@downloadURL/@updateURL` 两行 |
+| 版本 | 1.0.1 → **1.0.2**（因 P0 修复重出安装包，避免同版本覆盖不明确；阶段 2 用 1.1.0） |
 | 真实探针 `node scripts/probe-app-api.mjs` | **4/4 通过**：匿名 `x/v2/space` `code:0`；脚本 `fetchIpLocation` 解析正常且无 location；假 key 同样无 location（证明返回码不可信）；passport `auth_code` `code:0` |
 | 手动验收 | 待用户按 `MANUAL-TEST.md` 执行 |
 | 阶段 2 | 未开始（等待用户确认） |

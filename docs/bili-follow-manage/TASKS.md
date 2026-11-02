@@ -23,7 +23,7 @@
 
 ## 2. 代码：头部与常量
 
-- [x] `@version` 改 `1.0.1`
+- [x] `@version` 改 `1.0.2`
 - [x] `@description` 追加「主页 IP 属地检测」
 - [x] 新增 `@connect app.bilibili.com`
 - [x] 新增 `@connect passport.bilibili.com`
@@ -126,7 +126,7 @@
 
 ## 11. 交付
 
-- [x] 产物拷到 `H:\资源\js脚本\bilibili.com\BiliBili 关注管理-1.0.1.user.js`
+- [x] 产物拷到 `H:\资源\js脚本\bilibili.com\BiliBili 关注管理-1.0.2.user.js`
 - [x] 回写 `H:\资源\js脚本\bilibili.com\TamperMonkeyScript-main\BilibiliFollowManage.js`（源文件）
 - [x] 比对回写文件与仓库源文件一致（md5）
 - [ ] 交用户按 `MANUAL-TEST.md` 验收
@@ -136,11 +136,11 @@
 ## 阶段 2（等待确认）
 
 - [!] 等待用户确认阶段 1 手动验收通过
-- [!] 未确认前不改 `1.0.2`、不加 `oldfan` 选项/按钮/字段/测试
+- [!] 未确认前不改 `1.1.0`、不加 `oldfan` 选项/按钮/字段/测试
 - [ ] 确认后：加 `<option value="oldfan">老粉计划</option>` 与「老粉计划」按钮
 - [ ] `fetchInfo('oldfan')`：`encWbi` + `x/space/wbi/acc/info?mid=&platform=web&web_location=1550101`，`token` 空串
 - [ ] 读 `data.contract.is_follow_display` / `is_display`
 - [ ] 字段 `oldFan/oldFanDisplay/oldFanChecked/oldFanAt`
 - [ ] 标签 `.t-oldfan`，筛选三态同 `ip`
-- [ ] 版本 `1.0.2`，补单测与手动验收
+- [ ] 版本 `1.1.0`，补单测与手动验收
 - [ ] 明确区分：现有 `contract`「老粉」= 原始粉丝；阶段 2 `oldfan` = 老粉计划

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         BiliBili 关注管理
 // @namespace    https://github.com/YisRime/TamperMonkeyScript
-// @version      1.0.1
+// @version      1.0.2
 // @description  B站关注管理，支持批量取关、分组管理、信息同步、主页 IP 属地检测等功能，适用于批量管理关注列表。
 // @author       苡淞
 // @match        https://space.bilibili.com/*/relation/follow*
