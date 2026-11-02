@@ -8,15 +8,18 @@
     "build": "node scripts/build.ts all",
     "build:quiz": "node scripts/build.ts AutoQuiz",
     "build:player": "node scripts/build.ts R6Player",
+    "build:follow": "node scripts/build-follow.mjs",
     "check": "node scripts/build.ts all --check",
     "test": "node scripts/R6Player.test.ts && node scripts/AutoQuiz.test.ts",
     "test:quiz": "node scripts/AutoQuiz.test.ts",
     "test:player": "node scripts/R6Player.test.ts",
+    "test:follow": "node --test \"test/follow-manage/*.test.mjs\"",
     "typecheck": "tsc -p tsconfig.json"
   },
   "devDependencies": {
     "@types/node": "^26.6.2",
     "esbuild": "^0.25.12",
+    "jsdom": "^26.1.0",
     "typescript": "^5.9.3"
   },
   "allowScripts": {
