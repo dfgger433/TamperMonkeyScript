@@ -58,6 +58,45 @@ test('同步后 attribute=6 记为互关、face 去掉 http:', async () => {
   assert.ok(!first.face.startsWith('http:'))
 })
 
+test('同步关注列表时保留老粉计划检测结果', async () => {
+  const routes = [{ match: 'api.bilibili.com/x/relation/followings', respond: () => FOLLOWINGS }]
+  const { app } = boot({ routes })
+  open(app)
+  app.state.list = [
+    makeUser({ uid: 1, name: '甲', oldFan: true, oldFanDisplay: true, oldFanChecked: true, oldFanAt: 111 }),
+  ]
+
+  await app.syncData()
+
+  const first = app.state.list.find((u) => u.uid === 1)
+  assert.equal(first.oldFan, true)
+  assert.equal(first.oldFanDisplay, true)
+  assert.equal(first.oldFanChecked, true)
+  assert.equal(first.oldFanAt, 111)
+})
+
+test('导入 1.0.3 备份（无 oldFan 字段）不会抹掉老粉计划结果', () => {
+  const { app } = boot()
+  open(app)
+  app.state.list = [
+    makeUser({ uid: 1, name: '甲', oldFan: true, oldFanDisplay: true, oldFanChecked: true, oldFanAt: 111 }),
+  ]
+  app.mergeImported([{ uid: 1, name: '甲', mutual: false, ip: '上海', ipChecked: true, ipAt: 1 }])
+
+  assert.equal(app.state.list[0].oldFan, true, '备份没有 oldFan 时必须保留')
+  assert.equal(app.state.list[0].oldFanChecked, true)
+  assert.equal(app.state.list[0].oldFanAt, 111)
+})
+
+test('导入新版本备份会按备份覆盖老粉计划结果', () => {
+  const { app } = boot()
+  open(app)
+  app.state.list = [makeUser({ uid: 1, name: '甲', oldFan: true, oldFanChecked: true, oldFanAt: 111 })]
+  app.mergeImported([{ uid: 1, name: '甲', mutual: false, oldFan: false, oldFanChecked: true, oldFanAt: 222 }])
+  assert.equal(app.state.list[0].oldFan, false)
+  assert.equal(app.state.list[0].oldFanAt, 222)
+})
+
 test('导入 1.0.0 备份不会抹掉已检测的 IP', () => {
   const { app } = boot()
   open(app)

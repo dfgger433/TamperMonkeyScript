@@ -52,7 +52,33 @@ test('互关 / 原始粉丝 / 分组标签在重构后仍然正确', () => {
   assert.match(html, /同学/)
 })
 
+test('有老粉计划的用户行内出现「老粉计划」标签', () => {
+  const { app, window } = boot()
+  open(app)
+  app.state.list = [
+    makeUser({ uid: 1, name: '甲', oldFan: true, oldFanChecked: true }),
+    makeUser({ uid: 2, name: '乙', oldFan: false, oldFanChecked: true }),
+  ]
+  app.render()
+  const doc = window.document
+  const html1 = doc.querySelector('tr[data-mid="1"] .bm-tags').innerHTML
+  assert.match(html1, /class="bm-tag t-oldfan"/)
+  assert.match(html1, /老粉计划/)
+  assert.doesNotMatch(doc.querySelector('tr[data-mid="2"] .bm-tags').innerHTML, /老粉计划/)
+})
+
+test('IP 与老粉计划标签可同时出现', () => {
+  const { app, window } = boot()
+  open(app)
+  app.state.list = [makeUser({ uid: 1, name: '甲', ip: '上海', ipChecked: true, oldFan: true, oldFanChecked: true })]
+  app.render()
+  const html = window.document.querySelector('tr[data-mid="1"] .bm-tags').innerHTML
+  assert.match(html, /IP:上海/)
+  assert.match(html, /老粉计划/)
+})
+
 test('tagHtml 生成合法标签', () => {
   const { app } = boot()
   assert.equal(app.tagHtml('t-ip', 'IP:上海'), '<span class="bm-tag t-ip">IP:上海</span>')
+  assert.equal(app.tagHtml('t-oldfan', '老粉计划'), '<span class="bm-tag t-oldfan">老粉计划</span>')
 })

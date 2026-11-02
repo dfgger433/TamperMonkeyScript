@@ -76,7 +76,7 @@
 - `access_token` 等同于账号凭据，只存本机 `localStorage`，不打印、不上传。
 - `auth_code` 有时效，过期需从第 1 步重新开始（本脚本每次都新建）。
 
-## 6. 老粉计划字段（阶段 2）
+## 6. 老粉计划字段（阶段 2，已实现 1.1.0）
 
 请求（网页接口，复用现有 `encWbi`）：
 
@@ -88,6 +88,7 @@ GET https://api.bilibili.com/x/space/wbi/acc/info?mid=<mid>&platform=web&web_loc
 - 响应：`data.contract.is_follow_display`（是否显示老粉计划）、`data.contract.is_display`。
 - 参考脚本 `哔哩哔哩老粉计划检测器-20260902.user.js` 第 3374 行即读 `contract?.is_follow_display`。
 - 该接口匿名通常 `-352/-403`（风控），需要浏览器登录态；这也是它不能进 CI 的原因。
+- 实现补充：`getWbi()` 不能因 nav 返回 `-101`（未登录）就丢弃 `wbi_img`——wbi key 与登录无关，否则未登录环境下老粉计划检测会全部失败。现改用 `reqRaw` 只解析 JSON、不看 `code`。
 
 命名冲突：现有状态下拉 `contract`（基线 252 行）读的是 `contract_info.is_contract`（基线 445 行），标签写「原始粉丝」（基线 562 行），**不是**老粉计划。阶段 2 必须用新值 `oldfan`，不要复用 `contract`。
 

@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         BiliBili 关注管理
 // @namespace    https://github.com/YisRime/TamperMonkeyScript
-// @version      1.0.3
-// @description  B站关注管理，支持批量取关、分组管理、信息同步、主页 IP 属地检测等功能，适用于批量管理关注列表。
+// @version      1.1.0
+// @description  B站关注管理，支持批量取关、分组管理、信息同步、主页 IP 属地检测、老粉计划检测等功能，适用于批量管理关注列表。
 // @author       苡淞
 // @match        https://space.bilibili.com/*/relation/follow*
 // @match        https://space.bilibili.com/*/fans/follow*
@@ -92,6 +92,7 @@
         .bm-tag{font-size:11px;padding:0 6px;height:18px;border-radius:4px;display:inline-flex;align-items:center;justify-content:center;border:1px solid;line-height:1;flex-shrink:0;font-weight:400;margin-left:2px}
         .t-vip{color:#d6249f;background:#fdf2f8;border-color:#fbcfe8}.t-org{color:#0066ff;background:#e6f0ff;border-color:#b3d1ff}.t-per{color:#ff6b00;background:#fff4e6;border-color:#ffd8a8}.t-group{color:#10b981;background:#ecfdf5;border-color:#a7f3d0}.t-special{color:#e63946;background:#ffe5e5;border-color:#ffadad}.t-mutual{color:#8b5cf6;background:#f5f3ff;border-color:#c4b5fd}.t-other{color:#b45309;background:#fffbeb;border-color:#fde68a}.t-none{color:#9ca3af;background:#f9fafb;border-color:#e5e7eb}
         .t-ip{color:#0284c7;background:#e0f2fe;border-color:#7dd3fc}
+        .t-oldfan{color:#b45309;background:#fef3c7;border-color:#fcd34d}
         .bm-tags{display:inline-flex;align-items:center;flex-shrink:0}
         .bm-toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,0.75);color:#fff;padding:8px 16px;border-radius:4px;z-index:20000;font-size:13px;pointer-events:none;opacity:0;transition:opacity .3s}
         .bm-toast.show{opacity:1}
@@ -228,14 +229,27 @@
             });
         }
 
+        /** 只解析 JSON，不看 code（nav 未登录会返回 -101 但 wbi_img 仍然可用） */
+        reqRaw(url) {
+            return new Promise((res, rej) => {
+                GM_xmlhttpRequest({
+                    method: 'GET', url,
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'Cookie': document.cookie },
+                    onload: r => { try { res(JSON.parse(r.responseText)); } catch { rej({ message: 'JSON Error' }); } },
+                    onerror: () => rej({ message: 'Net Error' })
+                });
+            });
+        }
+
         async getWbi() {
             if (this.state.wbi) return this.state.wbi;
             try {
-                const { data: { wbi_img: { img_url, sub_url } } } = await this.req('https://api.bilibili.com/x/web-interface/nav');
-                return this.state.wbi = {
-                    ik: img_url.slice(img_url.lastIndexOf('/') + 1, img_url.lastIndexOf('.')),
-                    sk: sub_url.slice(sub_url.lastIndexOf('/') + 1, sub_url.lastIndexOf('.'))
-                };
+                const j = await this.reqRaw('https://api.bilibili.com/x/web-interface/nav');
+                const img = j.data?.wbi_img;
+                if (!img) throw new Error('no wbi_img');
+                const ik = img.img_url.slice(img.img_url.lastIndexOf('/') + 1, img.img_url.lastIndexOf('.'));
+                const sk = img.sub_url.slice(img.sub_url.lastIndexOf('/') + 1, img.sub_url.lastIndexOf('.'));
+                return this.state.wbi = { ik, sk };
             } catch { return { ik: '', sk: '' }; }
         }
 
@@ -267,7 +281,7 @@
                                 <div class="bm-toggle" id="bm-s-ver-op">是</div>
                             </div>
                             <div class="bm-group">
-                                <select id="bm-s-stat" class="bm-select" style="width:40px"><option value="">状态</option><option value="mutual">互关</option><option value="special">特别</option><option value="contract">老粉</option><option value="die">已注销</option><option value="ip">IP属地</option></select>
+                                <select id="bm-s-stat" class="bm-select" style="width:40px"><option value="">状态</option><option value="mutual">互关</option><option value="special">特别</option><option value="contract">老粉</option><option value="die">已注销</option><option value="ip">IP属地</option><option value="oldfan">老粉计划</option></select>
                                 <div class="bm-toggle" id="bm-s-stat-op">是</div>
                             </div>
                             <div class="bm-group">
@@ -281,6 +295,7 @@
                             <button class="bm-btn" id="bm-btn-fetch-fans">粉丝</button>
                             <button class="bm-btn" id="bm-btn-fetch-dyn">动态</button>
                             <button class="bm-btn" id="bm-btn-fetch-ip" title="检测关注用户主页是否有 IP 属地（需要 access_key 授权）">IP属地</button>
+                            <button class="bm-btn" id="bm-btn-fetch-oldfan" title="检测关注用户是否显示老粉计划（网页接口 contract.is_follow_display）">老粉计划</button>
                             <div class="bm-v-divider"></div>
                             <button class="bm-btn" id="bm-btn-unf" disabled>取关</button>
                             <button class="bm-btn" id="bm-btn-fol" disabled>关注</button>
@@ -363,6 +378,7 @@
             Q('#bm-btn-fetch-fans').onclick = () => this.act('fetch-fans');
             Q('#bm-btn-fetch-dyn').onclick = () => this.act('fetch-dyn');
             Q('#bm-btn-fetch-ip').onclick = () => this.act('fetch-ip');
+            Q('#bm-btn-fetch-oldfan').onclick = () => this.act('fetch-oldfan');
             Q('#bm-ip-auth').onclick = () => this.manageAccessKey();
             Q('#bm-btn-imp').onclick = () => this.act('imp');
             Q('#bm-btn-exp').onclick = () => this.act('exp');
@@ -444,6 +460,8 @@
                         if (old) {
                             u.fans = old.fans || 0; u.videoTime = old.videoTime || 0; u.dynamicTime = old.dynamicTime || 0;
                             u.ip = old.ip ?? ''; u.ipChecked = !!old.ipChecked; u.ipAt = old.ipAt || 0;
+                            u.oldFan = !!old.oldFan; u.oldFanDisplay = !!old.oldFanDisplay;
+                            u.oldFanChecked = !!old.oldFanChecked; u.oldFanAt = old.oldFanAt || 0;
                         }
                         fresh.push(u);
                     });
@@ -459,10 +477,14 @@
 
         parse(u) {
             if (u.uid && u.mutual !== undefined) {
-                // 导入/旧库对象：补齐 IP 检测字段，保持三态判断可用
+                // 导入/旧库对象：补齐检测字段，保持三态判断可用
                 if (u.ip === undefined) u.ip = '';
                 if (u.ipChecked === undefined) u.ipChecked = false;
                 if (u.ipAt === undefined) u.ipAt = 0;
+                if (u.oldFan === undefined) u.oldFan = false;
+                if (u.oldFanDisplay === undefined) u.oldFanDisplay = false;
+                if (u.oldFanChecked === undefined) u.oldFanChecked = false;
+                if (u.oldFanAt === undefined) u.oldFanAt = 0;
                 return u;
             }
             let v = "";
@@ -475,7 +497,9 @@
                 fans: u.follower || 0, followTime: u.mtime || 0, videoTime: u.last_video_ts || 0, dynamicTime: u.last_dynamic_ts || 0,
                 groups: u.tag || [], mutual: u.attribute === 6, special: u.special === 1,
                 contract: u.contract_info?.is_contract, org: u.official_verify?.type === 1, desc: u.official_verify?.desc, vip: v,
-                ip: u.ip ?? '', ipChecked: u.ipChecked ?? false, ipAt: u.ipAt || 0
+                ip: u.ip ?? '', ipChecked: u.ipChecked ?? false, ipAt: u.ipAt || 0,
+                oldFan: u.oldFan ?? false, oldFanDisplay: u.oldFanDisplay ?? false,
+                oldFanChecked: u.oldFanChecked ?? false, oldFanAt: u.oldFanAt || 0
             };
         }
 
@@ -492,12 +516,16 @@
                 const opEl = Q(`#bm-s-${t}-op`);
                 const op = opEl.textContent === '是';
                 const selText = el.options[el.selectedIndex].text;
-                const label = (t === 'stat' && el.value === 'ip')
+                const isDetect = t === 'stat' && (el.value === 'ip' || el.value === 'oldfan');
+                const label = isDetect
                     ? `${op ? '有' : '无'}${selText}`
                     : `${el.options[0].text} ${opEl.textContent} ${selText}`;
                 push({ t, v: el.value, op, l: label });
-                if (t === 'stat' && el.value === 'ip' && !this.state.list.some(u => u.ipChecked)) {
-                    this.toast('还没有人检测过 IP 属地，可点上方的「IP属地」按钮先检测');
+                if (isDetect) {
+                    const checked = el.value === 'ip'
+                        ? this.state.list.some(u => u.ipChecked)
+                        : this.state.list.some(u => u.oldFanChecked);
+                    if (!checked) this.toast(`还没有人检测过${selText}，可点上方的「${selText}」按钮先检测`);
                 }
                 el.value = "";
             } else {
@@ -554,10 +582,12 @@
                         let t = c.s==='mtime'?u.followTime:(c.s==='last_video_ts'?u.videoTime:u.dynamicTime);
                         if ((c.op==='<=' && t>c.v) || (c.op==='>' && t<c.v)) return false;
                     } else {
-                        if (c.t === 'stat' && c.v === 'ip') {
+                        if (c.t === 'stat' && (c.v === 'ip' || c.v === 'oldfan')) {
                             // 三态：未检测的用户 既不算“有”也不算“无”
-                            if (!u.ipChecked) return false;
-                            if (!!u.ip !== c.op) return false;
+                            const checked = c.v === 'ip' ? u.ipChecked : u.oldFanChecked;
+                            const hit = c.v === 'ip' ? !!u.ip : !!u.oldFan;
+                            if (!checked) return false;
+                            if (hit !== c.op) return false;
                             continue;
                         }
                         let is_match = false;
@@ -619,6 +649,7 @@
             if (u.mutual) ts.push(this.tagHtml('t-mutual', '互相关注'));
             if (u.contract) ts.push(this.tagHtml('t-other', '原始粉丝'));
             if (u.ip) ts.push(this.tagHtml('t-ip', `IP:${u.ip}`));
+            if (u.oldFan) ts.push(this.tagHtml('t-oldfan', '老粉计划'));
             u.groups?.forEach(g => g === -10
                 ? ts.push(this.tagHtml('t-special', '特别关注'))
                 : (g !== 0 && this.state.groups[g] && ts.push(this.tagHtml('t-group', this.state.groups[g]))));
@@ -664,24 +695,28 @@
             this.render();
         }
 
-        /** 导入 JSON：已存在的人只更新备份里确实有的字段；备份不含 ip 时保留本机已检测结果 */
+        /** 导入 JSON：已存在的人只更新备份里确实有的字段；备份不含检测字段时保留本机结果 */
         mergeImported(list) {
             const map = new Map(); this.state.list.forEach(u => map.set(u.uid, u));
             let n = 0;
+            const has = (raw, k) => !!raw && Object.prototype.hasOwnProperty.call(raw, k);
             list.forEach(raw => {
-                const hasIp = !!raw && Object.prototype.hasOwnProperty.call(raw, 'ip');
+                const hasIp = has(raw, 'ip');
+                const hasOldFan = has(raw, 'oldFan');
                 const u = this.parse(raw);
                 const exist = map.get(u.uid);
                 if (!exist) { this.state.list.unshift(u); map.set(u.uid, u); n++; return; }
-                const prev = { ip: exist.ip, ipChecked: exist.ipChecked, ipAt: exist.ipAt };
+                const prevIp = { ip: exist.ip, ipChecked: exist.ipChecked, ipAt: exist.ipAt };
+                const prevOld = { oldFan: exist.oldFan, oldFanDisplay: exist.oldFanDisplay, oldFanChecked: exist.oldFanChecked, oldFanAt: exist.oldFanAt };
                 Object.assign(exist, u);
-                if (!hasIp) { exist.ip = prev.ip; exist.ipChecked = prev.ipChecked; exist.ipAt = prev.ipAt; }
+                if (!hasIp) { Object.assign(exist, prevIp); }
+                if (!hasOldFan) { Object.assign(exist, prevOld); }
             });
             return n;
         }
 
         async act(t, op) {
-            // fetch-fans / fetch-dyn / fetch-ip → fetchInfo('fans'|'dyn'|'ip')
+            // fetch-fans / fetch-dyn / fetch-ip / fetch-oldfan → fetchInfo(type)
             if (t.startsWith('fetch-')) return this.fetchInfo(t.slice('fetch-'.length));
             if (this.state.busy) return;
             if (t === 'exp') {
@@ -763,6 +798,27 @@
             const tags = [...(card.space_tag || []), ...(card.space_tag_bottom || [])];
             const loc = tags.find(t => t && t.type === 'location');
             return loc?.title || '';
+        }
+
+        /** 网页接口重试（-352/-799 退避 2 次） */
+        async reqRetry(url, retry = 2) {
+            try { return await this.req(url); }
+            catch (e) {
+                if (retry > 0 && (e?.code === -352 || e?.code === -799)) {
+                    await new Promise(r => setTimeout(r, 1500 * (3 - retry)));
+                    return this.reqRetry(url, retry - 1);
+                }
+                throw e;
+            }
+        }
+
+        /** 老粉计划：x/space/wbi/acc/info 的 data.contract（网页端 token 传空串） */
+        async fetchOldFan(uid) {
+            const q = encWbi({ mid: uid, token: '', platform: 'web', web_location: 1550101 }, this.state.wbi.ik, this.state.wbi.sk);
+            const { data } = await this.reqRetry(`https://api.bilibili.com/x/space/wbi/acc/info?${q}`);
+            const contract = data?.contract;
+            if (!contract) throw { code: -1, message: '响应缺少 contract 数据' };
+            return { follow: contract.is_follow_display === true, display: contract.is_display === true };
         }
 
         parseAccessKey(text) {
@@ -932,7 +988,8 @@
             if (!items.length) items = this.view || [];
             if (!items.length) return alert('列表为空');
             const isIp = type === 'ip';
-            const b = Q({ fans: '#bm-btn-fetch-fans', dyn: '#bm-btn-fetch-dyn', ip: '#bm-btn-fetch-ip' }[type]);
+            const isOld = type === 'oldfan';
+            const b = Q({ fans: '#bm-btn-fetch-fans', dyn: '#bm-btn-fetch-dyn', ip: '#bm-btn-fetch-ip', oldfan: '#bm-btn-fetch-oldfan' }[type]);
             if (!b) return;
             const originalText = b.textContent;
             this.state.busy = true; this.state.stop = false;
@@ -953,14 +1010,15 @@
                 this._ipAbort = '';
                 b.textContent = '停止'; b.classList.add('processing');
                 const delayMs = isIp ? Math.max(this.settings.shortDelay, 800)
-                    : (type === 'fans' ? this.settings.shortDelay : this.settings.longDelay);
-                const conc = isIp ? 2 : 5;
+                    : (isOld ? Math.max(this.settings.shortDelay, 600)
+                    : (type === 'fans' ? this.settings.shortDelay : this.settings.longDelay));
+                const conc = (isIp || isOld) ? 2 : 5;
                 const st = Q('#bm-st');
                 let completed = 0, failed = 0, hits = 0;
                 if (!isIp) await this.getWbi();
                 const updateProgress = (err) => {
                     completed++; if (err) failed++;
-                    st.innerHTML = `${isIp ? 'IP 检测中' : '更新中'}... <span class="bm-status-num">${completed}</span> / ${items.length}${failed ? `（失败 ${failed}）` : ''}`;
+                    st.innerHTML = `${isIp ? 'IP 检测中' : (isOld ? '老粉计划检测中' : '更新中')}... <span class="bm-status-num">${completed}</span> / ${items.length}${failed ? `（失败 ${failed}）` : ''}`;
                 };
                 const tasks = items.map(u => async () => {
                     // 每步按 uid 取当前对象：同步替换 state.list 后依然写入新对象
@@ -997,6 +1055,13 @@
                             cur.ipChecked = true; cur.ipAt = Date.now();
                             if (cur.ip) hits++;
                             this.setRowTags(cur);
+                        } else if (isOld) {
+                            const r = await this.fetchOldFan(cur.uid);
+                            cur.oldFan = r.follow;
+                            cur.oldFanDisplay = r.display;
+                            cur.oldFanChecked = true; cur.oldFanAt = Date.now();
+                            if (cur.oldFan) hits++;
+                            this.setRowTags(cur);
                         }
                         await this.updateDBItem(cur);
                     } catch (e) {
@@ -1005,6 +1070,13 @@
                         if (e?.code === -101) { this.state.stop = true; if (isIp) this._keyInvalid = true; }
                         if (isIp && e?.code === -404) {
                             cur.ip = ''; cur.ipChecked = true; cur.ipAt = Date.now();
+                            this.setRowTags(cur); err = null;
+                            this.updateDBItem(cur).catch(() => {});
+                        }
+                        if (isOld && e?.code === -404) {
+                            // 账号不存在/已注销：没有 contract，记已检测·无老粉计划
+                            cur.oldFan = false; cur.oldFanDisplay = false;
+                            cur.oldFanChecked = true; cur.oldFanAt = Date.now();
                             this.setRowTags(cur); err = null;
                             this.updateDBItem(cur).catch(() => {});
                         }
@@ -1035,10 +1107,11 @@
                 if (this.settings.autoDeselect) this.state.selected.clear();
                 this.render();
                 // render() 里的 updateUI() 会重写状态栏，所以完成信息放在它之后写
+                const scanLabel = isIp ? 'IP ' : (isOld ? '老粉计划' : '');
                 st.textContent = isStopped
-                    ? `已停止（${isIp ? `IP 已检测 ${completed - failed}/${items.length}` : `已完成 ${completed}/${items.length}`}）`
-                    : (isIp
-                        ? `IP 检测完成 ${completed - failed}/${items.length}${failed ? `（失败 ${failed}）` : ''}`
+                    ? `已停止（${scanLabel ? `${scanLabel}已检测 ${completed - failed}/${items.length}` : `已完成 ${completed}/${items.length}`}）`
+                    : (scanLabel
+                        ? `${scanLabel}检测完成 ${completed - failed}/${items.length}${failed ? `（失败 ${failed}）` : ''}`
                         : `更新完成 ${completed} 人`);
                 if (isIp && !isStopped && failed === 0 && hits === 0 && items.length >= 5) {
                     alert('本次检测没有取到任何 IP 属地。\n\n若这些用户主页本应显示属地，可能是 access_key 未生效（假/过期 key 同样返回 code:0）。建议点「IP授权」重新授权后再试。');

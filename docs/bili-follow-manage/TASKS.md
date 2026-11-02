@@ -23,7 +23,7 @@
 
 ## 2. 代码：头部与常量
 
-- [x] `@version` 改 `1.0.3`
+- [x] `@version` 改 `1.1.0`
 - [x] `@description` 追加「主页 IP 属地检测」
 - [x] 新增 `@connect app.bilibili.com`
 - [x] 新增 `@connect passport.bilibili.com`
@@ -104,19 +104,20 @@
 
 - [x] `node --check BilibiliFollowManage.js`
 - [x] `test/follow-manage/` 下 jsdom 启动与桩（`GM_addStyle`、`GM_xmlhttpRequest`、`indexedDB`、`alert/confirm/prompt`、`setTimeout`）
-- [x] 用例：dropdown（4）
-- [x] 用例：filter（3）
-- [x] 用例：tags（4）
+- [x] 用例：dropdown（5）
+- [x] 用例：filter（5）
+- [x] 用例：tags（6）
 - [x] 用例：detect-ip（19）
+- [x] 用例：detect-oldfan（7）
 - [x] 用例：access-key（14）
-- [x] 用例：sync（6）
-- [x] `npm run test:follow` 全绿（50/50）
+- [x] 用例：sync（9）
+- [x] `npm run test:follow` 全绿（65/65）
 - [x] 审查修复（P0）：`act()` 用 `startsWith('fetch-')` 路由，补「点真实按钮」回归测试，断言不发起 `x/relation/*modify`
 - [x] 审查修复（P1）：批次内固定 `scanKey` 且变更即停；`manageAccessKey` 加 `busy` 守卫；`unknown` 改确认门；缺 `card` 记失败
 - [x] 审查修复（中）：同步替换列表后按 uid 重新解析；双击 `busy` 前置 + `_ipAuthing`；导入旧备份保留 IP；每 25 人 canary + 整批 0 属地告警
 - [x] 审查修复（低）：TV 授权不手写 Cookie；`.bm-name` 省略号；调试钩子仅 `__BM_TEST__` 暴露；`state.view` 初始化
 - [x] `npm run build:follow` 产物校验（版本、两行、`node --check` 通过）
-- [x] 新增 `scripts/probe-app-api.mjs`，真实探针 4/4（`TESTING.md` §4 已记录日期）
+- [x] `scripts/probe-app-api.mjs` 扩展到 6 项：真实探针 6/6（`TESTING.md` §4 已记录日期）
 
 ## 10. 推送
 
@@ -128,21 +129,21 @@
 
 ## 11. 交付
 
-- [x] 产物拷到 `H:\资源\js脚本\bilibili.com\BiliBili 关注管理-1.0.3.user.js`
+- [x] 产物拷到 `H:\资源\js脚本\bilibili.com\BiliBili 关注管理-1.1.0.user.js`
 - [x] 回写 `H:\资源\js脚本\bilibili.com\TamperMonkeyScript-main\BilibiliFollowManage.js`（源文件）
 - [x] 比对回写文件与仓库源文件一致（md5）
-- [ ] 交用户按 `MANUAL-TEST.md` 验收
+- [ ] 交用户按 `MANUAL-TEST.md` 验收（IP 属地 + 老粉计划）
 - [ ] 收集验收结果（通过/失败项、控制台日志、Network 记录）
-- [ ] 用户明确「阶段 1 通过」后才解锁阶段 2
 
-## 阶段 2（等待确认）
+## 阶段 2（已实现，1.1.0）
 
-- [!] 等待用户确认阶段 1 手动验收通过
-- [!] 未确认前不改 `1.1.0`、不加 `oldfan` 选项/按钮/字段/测试
-- [ ] 确认后：加 `<option value="oldfan">老粉计划</option>` 与「老粉计划」按钮
-- [ ] `fetchInfo('oldfan')`：`encWbi` + `x/space/wbi/acc/info?mid=&platform=web&web_location=1550101`，`token` 空串
-- [ ] 读 `data.contract.is_follow_display` / `is_display`
-- [ ] 字段 `oldFan/oldFanDisplay/oldFanChecked/oldFanAt`
-- [ ] 标签 `.t-oldfan`，筛选三态同 `ip`
-- [ ] 版本 `1.1.0`，补单测与手动验收
-- [ ] 明确区分：现有 `contract`「老粉」= 原始粉丝；阶段 2 `oldfan` = 老粉计划
+- [x] 用户回复「继续任务2」，触发阶段 2
+- [x] 加 `<option value="oldfan">老粉计划</option>` 与「老粉计划」按钮（`#bm-btn-fetch-oldfan`）
+- [x] `fetchInfo('oldfan')`：`encWbi` + `x/space/wbi/acc/info?mid=&platform=web&web_location=1550101`，`token` 空串
+- [x] 读 `data.contract.is_follow_display` / `is_display`
+- [x] 字段 `oldFan/oldFanDisplay/oldFanChecked/oldFanAt`
+- [x] 标签 `.t-oldfan`，筛选三态同 `ip`；导入/同步保留
+- [x] 容错：`-352/-799` 退避重试、`-404` 记无、缺 `contract` 记失败
+- [x] `getWbi` 改用 `reqRaw`：nav 返回 `-101` 时仍取到 wbi key
+- [x] 版本 `1.1.0`，补 7 项 detect-oldfan 单测与手动验收（MANUAL-TEST 第 12 节）
+- [x] 明确区分：现有 `contract`「老粉」= 原始粉丝；阶段 2 `oldfan` = 老粉计划

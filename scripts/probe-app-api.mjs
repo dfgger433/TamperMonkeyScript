@@ -92,6 +92,26 @@ try {
   check('passport TV auth_code 入口可达', false, String(e))
 }
 
+// 5) 老粉计划接口（x/space/wbi/acc/info）：匿名不带登录态会被风控拦；
+//    能拿到 code 说明 wbi 签名与请求结构被服务端接受，而不是网络/解析错误
+try {
+  await app.getWbi()
+  check('getWbi 拿到 wbi key', !!app.state.wbi?.ik && !!app.state.wbi?.sk, app.state.wbi?.ik || '')
+} catch (e) {
+  check('getWbi 拿到 wbi key', false, String(e))
+}
+try {
+  await app.fetchOldFan(2)
+  check('acc/info 匿名请求被风控（预期，非网络错误）', true, 'code=0（该网络带了登录态）')
+} catch (e) {
+  const code = e?.code
+  check(
+    'acc/info 匿名请求被风控（预期，非网络错误）',
+    typeof code === 'number' && code !== 0 && code !== -1,
+    `code=${code} ${e?.message || ''}`.trim(),
+  )
+}
+
 const failed = results.filter((r) => !r.ok)
 console.log(`\n${results.length - failed.length}/${results.length} 通过`)
 process.exit(failed.length ? 1 : 0)

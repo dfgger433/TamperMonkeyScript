@@ -191,6 +191,10 @@ export function makeUser(over = {}) {
     ip: '',
     ipChecked: false,
     ipAt: 0,
+    oldFan: false,
+    oldFanDisplay: false,
+    oldFanChecked: false,
+    oldFanAt: 0,
     ...over,
   }
 }

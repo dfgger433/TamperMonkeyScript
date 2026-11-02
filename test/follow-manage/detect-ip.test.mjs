@@ -168,7 +168,7 @@ test('parse() 为未检测用户补默认字段', () => {
   assert.equal(u.ipAt, 0)
 })
 
-test('act() 的 fetch-* 路由：fans / dyn / ip 都进 fetchInfo', async () => {
+test('act() 的 fetch-* 路由：fans / dyn / ip / oldfan 都进 fetchInfo', async () => {
   const { app } = boot()
   open(app)
   const seen = []
@@ -176,7 +176,8 @@ test('act() 的 fetch-* 路由：fans / dyn / ip 都进 fetchInfo', async () => 
   await app.act('fetch-fans')
   await app.act('fetch-dyn')
   await app.act('fetch-ip')
-  assert.deepEqual(seen, ['fans', 'dyn', 'ip'])
+  await app.act('fetch-oldfan')
+  assert.deepEqual(seen, ['fans', 'dyn', 'ip', 'oldfan'])
 })
 
 test('点击「IP属地」按钮真的走检测（回归：曾误入关注/取关分支）', async () => {
