@@ -945,7 +945,7 @@
                 } catch (e) {
                     err = e;
                     console.error(`Failed to fetch info for ${u.uid}`, e);
-                    if (e?.code === -101) this.state.stop = true;
+                    if (e?.code === -101) { this.state.stop = true; if (isIp) this._keyInvalid = true; }
                     if (isIp && e?.code === -404) {
                         u.ip = ''; u.ipChecked = true; u.ipAt = Date.now();
                         this.setRowTags(u); err = null;
@@ -979,6 +979,14 @@
                 : (isIp
                     ? `IP 检测完成 ${completed - failed}/${items.length}${failed ? `（失败 ${failed}）` : ''}`
                     : `更新完成 ${completed} 人`);
+            if (this._keyInvalid) {
+                this._keyInvalid = false;
+                this.settings.accessKey = '';
+                this.settings.accessKeySrc = '';
+                this.saveSettings();
+                this.updateAuthLabel();
+                alert('access_key 已失效，检测已中止。请点「IP授权」重新授权后再试。');
+            }
         }
 
         async modRel(items, act) {

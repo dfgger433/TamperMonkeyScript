@@ -71,13 +71,13 @@ test('-352 风控会退避重试，重试成功后正常写入', async () => {
   assert.equal(app.state.list[0].ipChecked, true)
 })
 
-test('检测中 -101（登录失效）会中止整批，保持未检测', async () => {
+test('检测中 -101（登录失效）会中止整批、保持未检测并清掉失效 key', async () => {
   const routes = routesWith((url) => {
     const vmid = /vmid=(\d+)/.exec(url)?.[1]
     if (vmid === '888') return spaceTag('上海') // 授权校验可通过
     return { code: -101, message: '账号未登录' }
   })
-  const { app, document } = boot({ routes, settings: { accessKey: OK_KEY } })
+  const { app, document, log } = boot({ routes, settings: { accessKey: OK_KEY } })
   open(app)
   app.state.list = listOf([1, 2, 3])
   app.render()
@@ -86,6 +86,8 @@ test('检测中 -101（登录失效）会中止整批，保持未检测', async 
 
   assert.ok(app.state.list.every((u) => !u.ipChecked), '未完成的用户不能被标记为已检测')
   assert.match(document.querySelector('#bm-st').textContent, /已停止/)
+  assert.equal(app.settings.accessKey, '', '失效后要清掉 key，避免下次静默全判“无 IP”')
+  assert.ok(log.alerts.some((m) => m.includes('失效')), '应提示重新授权')
 })
 
 test('-799 请求频繁同样会重试', async () => {
