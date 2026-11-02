@@ -1,0 +1,144 @@
+# 任务清单 · IP 属地 / 老粉计划检测
+
+> 基线 `1.0.0`（`6f64cf1`）；分支 `feat/ip-oldfan-detect`。
+> 状态标记：`[ ]` 待做、`[x]` 完成、`[!]` 阻塞/等待确认、`[-]` 取消（附原因）。
+> 阶段 1 已在本机执行完毕，勾选以实际命令结果为准（见 `PLAN.md` §9、`TESTING.md` §1）。
+
+## 0. 准备与核对
+
+- [x] 确认分支为 `feat/ip-oldfan-detect`，从 `origin/main` 拉出
+- [x] 核对基线：`BilibiliFollowManage.js` 51457 字节、md5 `4e239f41ae0baf0541f65b3ecc683e52`
+- [x] 确认 `origin` 指向 `https://github.com/dfgger433/TamperMonkeyScript.git`
+- [x] 记录 1.0.0 发布版位置：`H:\资源\js脚本\bilibili.com\BiliBili 关注管理-1.0.0.user.js`
+- [x] 把工作区行尾统一为 LF（仓库 `core.autocrlf=false`，避免整文件 diff）
+
+## 1. 文档
+
+- [x] `docs/bili-follow-manage/PLAN.md`
+- [x] `docs/bili-follow-manage/RESEARCH.md`
+- [x] `docs/bili-follow-manage/TESTING.md`
+- [x] `docs/bili-follow-manage/MANUAL-TEST.md`
+- [x] `docs/bili-follow-manage/TASKS.md`
+- [x] 文档内路径、命令、行号复核（测试命令改 glob、`dist` 入库口径）
+
+## 2. 代码：头部与常量
+
+- [x] `@version` 改 `1.0.1`
+- [x] `@description` 追加「主页 IP 属地检测」
+- [x] 新增 `@connect app.bilibili.com`
+- [x] 新增 `@connect passport.bilibili.com`
+- [x] 确认未新增 `@grant`
+- [x] `encWbi` 后加 `APP_KEY/APP_SEC/LOGIN_APP_KEY/LOGIN_APP_SEC/APP_BUILD/APP_UA`
+- [x] 加 `genBuvid()`
+- [x] 加 `signParam(params, sec)`：排序 + `ts` + md5
+- [x] CSS 加 `.t-ip` 与 `.bm-tags`
+
+## 3. 代码：授权（access_key）
+
+- [x] `parseAccessKey(raw)`：支持裸串 / JSON（`aceess_key`、`access_key`）/ 文本片段（不做十六进制强校验，兼容特殊字符）
+- [x] `setAccessKey(key, src)`：写 `accessKey/accessKeySrc/accessKeyAt`
+- [x] `validateAccessKey(key)`：本人主页能取到 `location` 才算有效；辅以 `x/v2/history -101`；异常返回 `'unknown'` 不误判
+- [x] `acquireAccessKey()`：`qrcode/auth_code` → `h5/qrcode/confirm`（带 `csrf`）→ `qrcode/poll`
+- [x] 首次自动授权前提示「可能导致网页端掉线」
+- [x] `manageAccessKey()`：查看状态、清除、重新引导
+- [x] `ensureAccessKey()`：优先引导复制 `aceess_key`，失败/拒绝再走 TV 授权
+- [x] `updateAuthLabel()`：`IP授权: 未授权/已授权`（失效时清空并回到未授权）
+- [x] 清除授权时同步清 `accessKeySrc/accessKeyAt`，并刷新标签
+
+## 4. 代码：UI 与绑定
+
+- [x] 状态下拉加 `<option value="ip">IP属地</option>`
+- [x] 动作栏「动态」后加 `#bm-btn-fetch-ip`
+- [x] 子栏「清空缓存」后加 `#bm-ip-auth`
+- [x] 绑定 `#bm-btn-fetch-ip` → `act('fetch-ip')`（沿用 `t.split('-')[1]`）
+- [x] 绑定 `#bm-ip-auth` → `manageAccessKey()`
+- [x] 复用 `addCondOnChange('stat')`，未另写下拉逻辑
+- [x] 检测中按钮文案「停止」，结束后恢复
+
+## 5. 代码：筛选与标签
+
+- [x] `addCond` 对 `stat=ip` 特判 chip：`有IP属地` / `无IP属地`（其它选项文案不变）
+- [x] `render()` 的 `stat` 分支加三态：`!ipChecked` 两边都不匹配
+- [x] 「有」= `ipChecked && ip`；「无」= `ipChecked && !ip`
+- [x] 无任何已检测数据时 toast 提示先检测
+- [x] 抽 `tagHtml` / `userTags(u)`，保留互关/原始粉丝/特别/分组
+- [x] 有 IP 输出 `IP:xx`，用 `.t-ip`
+- [x] 模板改用 `<span class="bm-tags">`
+- [x] `setRowTags(u)` 只局部刷新，不整表 `render()`
+
+## 6. 代码：批量检测 `fetchInfo('ip')`
+
+- [x] 选中优先，否则 `this.view`；空列表提示
+- [x] 单独队列，并发 2（其它类型仍为 5）
+- [x] 间隔 `Math.max(shortDelay, 800)` ms
+- [x] 单请求超时 20 s
+- [x] `-352/-799` 重试 2 次（1.5 s / 3 s）
+- [x] `-101` 中止并提示重新授权
+- [x] `-404` 记已检测·无 IP
+- [x] 成功/失败计数与进度写入 `#bm-st`（完成信息在 `render()` 之后写，避免被 `updateUI` 覆盖）
+- [x] 再点按钮/关面板可停止，在途请求不再新增
+- [x] 每个确定结果 `updateDBItem(u)`
+- [x] 网络错误只计失败，不写 `ipChecked`（单测覆盖）
+
+## 7. 代码：持久化
+
+- [x] `parse()` 补 `ip:''`、`ipChecked:false`、`ipAt:0`
+- [x] `parse()` 的「已解析」快速返回分支也补齐缺省字段（导入旧 JSON 兼容）
+- [x] `syncData()` 合并旧记录时保留 `ip/ipChecked/ipAt`
+- [x] 导入导出自动带三字段
+- [x] 确认 IndexedDB 仍为 `BiliFollowManageDB` v2、无 schema 变更
+- [x] 旧 1.0.0 数据库可直接打开（store 为 `keyPath:uid` 的 schemaless 对象仓库）
+
+## 8. 构建
+
+- [x] 新增 `scripts/build-follow.mjs`
+- [x] 从头部读取 `@version`
+- [x] 注入 `@downloadURL` / `@updateURL`（沿用 1.0.0 地址）
+- [x] 输出 `dist/BiliBili 关注管理-<version>.user.js`
+- [x] 失败时抛错退出（非 0）
+- [x] `package.json` 加 `build:follow`
+- [x] `package.json` 加 `test:follow`（glob，非目录）
+- [x] `devDependencies` 加 `jsdom`，更新 lockfile
+
+## 9. 测试
+
+- [x] `node --check BilibiliFollowManage.js`
+- [x] `test/follow-manage/` 下 jsdom 启动与桩（`GM_addStyle`、`GM_xmlhttpRequest`、`indexedDB`、`alert/confirm/prompt`、`setTimeout`）
+- [x] 用例：dropdown（4）
+- [x] 用例：filter（3）
+- [x] 用例：tags（4）
+- [x] 用例：detect-ip（9）
+- [x] 用例：access-key（11）
+- [x] 用例：sync（3）
+- [x] `npm run test:follow` 全绿（34/34）
+- [x] `npm run build:follow` 产物校验（版本、两行、`node --check` 通过）
+- [x] 新增 `scripts/probe-app-api.mjs`，真实探针 4/4（`TESTING.md` §4 已记录日期）
+
+## 10. 推送
+
+- [x] 提交前 `git status` / `git diff` 自查，无临时文件
+- [x] 提交拆分：`feat(follow)`（代码/测试/构建） + `docs(bili-follow-manage)`
+- [x] `git push origin feat/ip-oldfan-detect`
+- [x] 确认 `main` 未改动、未 force push、未推上游
+- [x] 记录远端分支链接（`https://github.com/dfgger433/TamperMonkeyScript/tree/feat/ip-oldfan-detect`）
+
+## 11. 交付
+
+- [x] 产物拷到 `H:\资源\js脚本\bilibili.com\BiliBili 关注管理-1.0.1.user.js`
+- [x] 回写 `H:\资源\js脚本\bilibili.com\TamperMonkeyScript-main\BilibiliFollowManage.js`（源文件）
+- [x] 比对回写文件与仓库源文件一致（md5）
+- [ ] 交用户按 `MANUAL-TEST.md` 验收
+- [ ] 收集验收结果（通过/失败项、控制台日志、Network 记录）
+- [ ] 用户明确「阶段 1 通过」后才解锁阶段 2
+
+## 阶段 2（等待确认）
+
+- [!] 等待用户确认阶段 1 手动验收通过
+- [!] 未确认前不改 `1.0.2`、不加 `oldfan` 选项/按钮/字段/测试
+- [ ] 确认后：加 `<option value="oldfan">老粉计划</option>` 与「老粉计划」按钮
+- [ ] `fetchInfo('oldfan')`：`encWbi` + `x/space/wbi/acc/info?mid=&platform=web&web_location=1550101`，`token` 空串
+- [ ] 读 `data.contract.is_follow_display` / `is_display`
+- [ ] 字段 `oldFan/oldFanDisplay/oldFanChecked/oldFanAt`
+- [ ] 标签 `.t-oldfan`，筛选三态同 `ip`
+- [ ] 版本 `1.0.2`，补单测与手动验收
+- [ ] 明确区分：现有 `contract`「老粉」= 原始粉丝；阶段 2 `oldfan` = 老粉计划
