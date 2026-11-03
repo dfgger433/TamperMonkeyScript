@@ -140,6 +140,53 @@ test('选中优先；已采集/已检测的人不再请求', async () => {
   assert.deepEqual(seen.sort(), ['1', '3'])
 })
 
+test('粉丝 ≥1000 的用户直接判「不显示」，不发请求', async () => {
+  const seen = []
+  const routes = routesWith((url) => {
+    seen.push(/mid=(\d+)/.exec(url)?.[1])
+    return contract(true)
+  })
+  const { app, window } = boot({ routes })
+  open(app)
+  app.state.list = [
+    makeUser({ uid: 1, name: '小up', fans: 999 }),
+    makeUser({ uid: 2, name: '大up', fans: 1000 }),
+    makeUser({ uid: 3, name: '更大up', fans: 50000 }),
+  ]
+  app.render()
+
+  await app.fetchInfo('oldfan')
+
+  assert.deepEqual(seen, ['1'], '只应请求粉丝 <1000 的人')
+  const small = app.state.list.find((u) => u.uid === 1)
+  const big = app.state.list.find((u) => u.uid === 2)
+  const bigger = app.state.list.find((u) => u.uid === 3)
+  assert.equal(small.oldFanChecked, true)
+  assert.equal(small.oldFan, true)
+  assert.equal(big.oldFanChecked, true, '≥1000 也要标记已处理，避免反复请求')
+  assert.equal(big.oldFan, false)
+  assert.equal(bigger.oldFan, false)
+  assert.match(window.document.querySelector('.bm-toast').textContent, /跳过 2 位/)
+  // 被跳过的用户归入「无老粉计划」
+  const doc = window.document
+  app.state.conds = [{ t: 'stat', v: 'oldfan', op: false, l: '无老粉计划' }]
+  app.render()
+  assert.deepEqual(app.view.map((u) => u.uid).sort(), [2, 3])
+  app.state.conds = []
+})
+
+test('已有检测结果的 ≥1000 粉丝用户不被覆盖', async () => {
+  const { app } = boot({ routes: routesWith(() => contract(false)) })
+  open(app)
+  app.state.list = [makeUser({ uid: 4, fans: 5000, oldFan: true, oldFanChecked: true, oldFanAt: 111 })]
+  app.render()
+
+  await app.fetchInfo('oldfan')
+
+  assert.equal(app.state.list[0].oldFan, true)
+  assert.equal(app.state.list[0].oldFanAt, 111, '已处理过的结果不因粉丝数规则被覆盖')
+})
+
 test('主页采集的缓存会在检测前自动合并，且不再发请求', async () => {
   const seen = []
   const routes = routesWith((url) => { seen.push(url); return contract(false) })

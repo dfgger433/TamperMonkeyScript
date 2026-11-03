@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         BiliBili 关注管理
 // @namespace    https://github.com/YisRime/TamperMonkeyScript
-// @version      1.1.1
+// @version      1.1.2
 // @description  B站关注管理，支持批量取关、分组管理、信息同步、主页 IP 属地检测、老粉计划检测（主页自动采集，避免接口风控）等功能，适用于批量管理关注列表。
 // @author       苡淞
 // @match        https://space.bilibili.com/*/relation/follow*
@@ -42,6 +42,8 @@
     // 参考「老粉计划检测器」的做法：不自己请求，而是钩住空间页自己的 acc/info 响应，采集到共享缓存。
     const OLD_FAN_URL='/x/space/wbi/acc/info';
     const OLD_FAN_CACHE_KEY='BiliFollowManageOldFanCache';
+    // 老粉计划只对粉丝 < 1000 的用户显示：>= 该数的人直接判「不显示」，不请求接口
+    const OLD_FAN_MAX_FANS=1000;
     const PAGE_W=(typeof unsafeWindow!=='undefined'&&unsafeWindow)||window;
 
     const readOldFanCache=()=>{try{return JSON.parse(localStorage.getItem(OLD_FAN_CACHE_KEY))||{};}catch(e){return {};}};
@@ -1123,9 +1125,24 @@
                     // 先用主页采集到的缓存（无风控），只对还没采集的人尝试请求
                     const cachedCount = this.applyOldFanCache();
                     const before = items.length;
+                    // 粉丝 >= 1000 的用户不会显示老粉计划：直接记「不显示」，省掉请求
+                    const skipped = [];
+                    items.forEach(u => {
+                        if (u.oldFanChecked) return;
+                        if ((u.fans || 0) >= OLD_FAN_MAX_FANS) {
+                            u.oldFan = false; u.oldFanDisplay = false;
+                            u.oldFanChecked = true; u.oldFanAt = Date.now();
+                            skipped.push(u);
+                            this.updateDBItem(u).catch(() => {});
+                        }
+                    });
+                    if (skipped.length) {
+                        this.render();
+                        this.toast(`已跳过 ${skipped.length} 位粉丝 ≥${OLD_FAN_MAX_FANS} 的用户（该功能不会显示）`);
+                    }
                     items = items.filter(u => !u.oldFanChecked);
                     if (!items.length) {
-                        this.toast(`这 ${before} 人已有主页采集结果（本次合并 ${cachedCount} 条），无需请求`);
+                        if (!skipped.length) this.toast(`这 ${before} 人已有主页采集结果（本次合并 ${cachedCount} 条），无需请求`);
                         return;
                     }
                 }
