@@ -23,7 +23,7 @@
 
 ## 2. 代码：头部与常量
 
-- [x] `@version` 改 `1.1.3`
+- [x] `@version` 改 `1.1.4`
 - [x] `@description` 追加「主页 IP 属地检测」
 - [x] 新增 `@connect app.bilibili.com`
 - [x] 新增 `@connect passport.bilibili.com`
@@ -108,10 +108,10 @@
 - [x] 用例：filter（5）
 - [x] 用例：tags（6）
 - [x] 用例：detect-ip（19）
-- [x] 用例：detect-oldfan（13）
+- [x] 用例：detect-oldfan（16）
 - [x] 用例：access-key（14）
 - [x] 用例：sync（11）
-- [x] `npm run test:follow` 全绿（73/73）
+- [x] `npm run test:follow` 全绿（76/76）
 - [x] 审查修复（P0）：`act()` 用 `startsWith('fetch-')` 路由，补「点真实按钮」回归测试，断言不发起 `x/relation/*modify`
 - [x] 审查修复（P1）：批次内固定 `scanKey` 且变更即停；`manageAccessKey` 加 `busy` 守卫；`unknown` 改确认门；缺 `card` 记失败
 - [x] 审查修复（中）：同步替换列表后按 uid 重新解析；双击 `busy` 前置 + `_ipAuthing`；导入旧备份保留 IP；每 25 人 canary + 整批 0 属地告警
@@ -129,13 +129,13 @@
 
 ## 11. 交付
 
-- [x] 产物拷到 `H:\资源\js脚本\bilibili.com\BiliBili 关注管理-1.1.3.user.js`
+- [x] 产物拷到 `H:\资源\js脚本\bilibili.com\BiliBili 关注管理-1.1.4.user.js`
 - [x] 回写 `H:\资源\js脚本\bilibili.com\TamperMonkeyScript-main\BilibiliFollowManage.js`（源文件）
 - [x] 比对回写文件与仓库源文件一致（md5）
 - [ ] 交用户按 `MANUAL-TEST.md` 验收（IP 属地 + 老粉计划）
 - [ ] 收集验收结果（通过/失败项、控制台日志、Network 记录）
 
-## 阶段 2（已实现；1.1.0 首版 → 1.1.1 风控改造 → 1.1.2 粉丝预筛 → 1.1.3 粉丝数来源修正）
+## 阶段 2（已实现；1.1.0 首版 → 1.1.1 风控改造 → 1.1.2 粉丝预筛 → 1.1.4 粉丝数来源修正）
 
 - [x] 用户回复「继续任务2」，触发阶段 2
 - [x] 加 `<option value="oldfan">老粉计划</option>` 与「老粉计划」按钮（`#bm-btn-fetch-oldfan`）
@@ -148,6 +148,7 @@
 - [x] 风控熔断：批量兜底改页面上下文 fetch、串行 ≥2.5s、`-352/-401/-403/-412/-799` 立即中止不重试；已采集/已检测的人不再请求
 - [x] 粉丝预筛（1.1.2）：粉丝 ≥1000 直接判「不显示」且不发请求；已有结果不覆盖；归入「无老粉计划」
 - [x] 粉丝数来源修正（1.1.3）：`syncData` 改为优先用 followings 的 `follower`，不再被旧缓存覆盖（预筛准确性的前提）
+- [x] 已有老粉标志跳过（1.1.4）：`contract_info.is_contract === true`（原始粉丝）不请求、不改状态，只提示跳过
 - [x] `@grant unsafeWindow`、`@run-at document-start`、`@match https://space.bilibili.com/*`；面板仅在关注/粉丝页创建
-- [x] 版本 `1.1.3`，73 项单测与手动验收（MANUAL-TEST 第 12 节）
+- [x] 版本 `1.1.4`，76 项单测与手动验收（MANUAL-TEST 第 12 节）
 - [x] 明确区分：现有 `contract`「老粉」= 原始粉丝；阶段 2 `oldfan` = 老粉计划

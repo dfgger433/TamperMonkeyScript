@@ -140,6 +140,61 @@ test('选中优先；已采集/已检测的人不再请求', async () => {
   assert.deepEqual(seen.sort(), ['1', '3'])
 })
 
+test('已有老粉标志（原始粉丝）的用户不检测、不发请求', async () => {
+  const seen = []
+  const routes = routesWith((url) => {
+    seen.push(/mid=(\d+)/.exec(url)?.[1])
+    return contract(false)
+  })
+  const { app, window } = boot({ routes })
+  open(app)
+  app.state.list = [
+    makeUser({ uid: 1, name: '原始粉丝', contract: true }),
+    makeUser({ uid: 2, name: '普通用户' }),
+  ]
+  app.render()
+
+  await app.fetchInfo('oldfan')
+
+  assert.deepEqual(seen, ['2'], '原始粉丝不应发请求')
+  const flagged = app.state.list.find((u) => u.uid === 1)
+  assert.equal(flagged.oldFanChecked, false, '不检测，保持未检测状态（不写假数据）')
+  assert.match(window.document.querySelector('.bm-toast').textContent, /老粉标志/)
+  // 行内仍然显示原有的「原始粉丝」标签
+  assert.match(window.document.querySelector('tr[data-mid="1"] .bm-tags').innerHTML, /原始粉丝/)
+})
+
+test('全部都是原始粉丝时整批不发请求', async () => {
+  const seen = []
+  const routes = routesWith((url) => { seen.push(url); return contract(false) })
+  const { app } = boot({ routes })
+  open(app)
+  app.state.list = [
+    makeUser({ uid: 1, contract: true }),
+    makeUser({ uid: 2, contract: true, fans: 5000 }),
+  ]
+  app.render()
+
+  await app.fetchInfo('oldfan')
+
+  assert.deepEqual(seen, [])
+  assert.ok(app.state.list.every((u) => !u.oldFanChecked))
+})
+
+test('原始粉丝优先于粉丝数规则：不标记、不请求', async () => {
+  const seen = []
+  const routes = routesWith((url) => { seen.push(url); return contract(false) })
+  const { app } = boot({ routes })
+  open(app)
+  app.state.list = [makeUser({ uid: 1, contract: true, fans: 5000 })]
+  app.render()
+
+  await app.fetchInfo('oldfan')
+
+  assert.deepEqual(seen, [])
+  assert.equal(app.state.list[0].oldFanChecked, false, '不要因为粉丝数规则把原始粉丝写成「无老粉计划」')
+})
+
 test('粉丝 ≥1000 的用户直接判「不显示」，不发请求', async () => {
   const seen = []
   const routes = routesWith((url) => {

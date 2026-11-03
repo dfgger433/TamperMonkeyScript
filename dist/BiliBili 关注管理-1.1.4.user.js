@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         BiliBili 关注管理
 // @namespace    https://github.com/YisRime/TamperMonkeyScript
-// @version      1.1.3
+// @version      1.1.4
 // @description  B站关注管理，支持批量取关、分组管理、信息同步、主页 IP 属地检测、老粉计划检测（主页自动采集，避免接口风控）等功能，适用于批量管理关注列表。
 // @author       苡淞
 // @match        https://space.bilibili.com/*/relation/follow*
@@ -1130,10 +1130,12 @@
                     // 先用主页采集到的缓存（无风控），只对还没采集的人尝试请求
                     const cachedCount = this.applyOldFanCache();
                     const before = items.length;
+                    // 已有老粉标志（原始粉丝 contract_info.is_contract）的人：不检测、不发请求
+                    const flagged = items.filter(u => !u.oldFanChecked && u.contract === true);
                     // 粉丝 >= 1000 的用户不会显示老粉计划：直接记「不显示」，省掉请求
                     const skipped = [];
                     items.forEach(u => {
-                        if (u.oldFanChecked) return;
+                        if (u.oldFanChecked || u.contract === true) return;
                         if ((u.fans || 0) >= OLD_FAN_MAX_FANS) {
                             u.oldFan = false; u.oldFanDisplay = false;
                             u.oldFanChecked = true; u.oldFanAt = Date.now();
@@ -1141,13 +1143,14 @@
                             this.updateDBItem(u).catch(() => {});
                         }
                     });
-                    if (skipped.length) {
-                        this.render();
-                        this.toast(`已跳过 ${skipped.length} 位粉丝 ≥${OLD_FAN_MAX_FANS} 的用户（该功能不会显示）`);
-                    }
-                    items = items.filter(u => !u.oldFanChecked);
+                    if (skipped.length) this.render();
+                    const msgs = [];
+                    if (flagged.length) msgs.push(`跳过 ${flagged.length} 位已有老粉标志（原始粉丝）`);
+                    if (skipped.length) msgs.push(`跳过 ${skipped.length} 位粉丝 ≥${OLD_FAN_MAX_FANS} 的用户（该功能不会显示）`);
+                    if (msgs.length) this.toast(`已${msgs.join('；')}`);
+                    items = items.filter(u => !u.oldFanChecked && u.contract !== true);
                     if (!items.length) {
-                        if (!skipped.length) this.toast(`这 ${before} 人已有主页采集结果（本次合并 ${cachedCount} 条），无需请求`);
+                        if (!msgs.length) this.toast(`这 ${before} 人已有主页采集结果（本次合并 ${cachedCount} 条），无需请求`);
                         return;
                     }
                 }
