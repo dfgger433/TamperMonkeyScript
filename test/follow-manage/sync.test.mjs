@@ -14,6 +14,30 @@ const FOLLOWINGS = {
   },
 }
 
+test('同步用接口新值覆盖旧粉丝数（老粉计划阈值靠它，不能用旧缓存）', async () => {
+  const routes = [{
+    match: 'api.bilibili.com/x/relation/followings',
+    respond: () => ({ code: 0, data: { total: 1, list: [{ mid: 1, uname: '甲', attribute: 0, follower: 1200 }] } }),
+  }]
+  const { app } = boot({ routes })
+  open(app)
+  app.state.list = [makeUser({ uid: 1, name: '甲', fans: 900 })]
+  await app.syncData()
+  assert.equal(app.state.list[0].fans, 1200, '粉丝数必须用本次同步的 follower，否则老粉计划预筛会误判')
+})
+
+test('同步接口没给粉丝数时才回退旧值', async () => {
+  const routes = [{
+    match: 'api.bilibili.com/x/relation/followings',
+    respond: () => ({ code: 0, data: { total: 1, list: [{ mid: 1, uname: '甲', attribute: 0 }] } }),
+  }]
+  const { app } = boot({ routes })
+  open(app)
+  app.state.list = [makeUser({ uid: 1, name: '甲', fans: 900 })]
+  await app.syncData()
+  assert.equal(app.state.list[0].fans, 900)
+})
+
 test('同步关注列表时保留 IP 检测结果', async () => {
   const routes = [{ match: 'api.bilibili.com/x/relation/followings', respond: () => FOLLOWINGS }]
   const { app } = boot({ routes })

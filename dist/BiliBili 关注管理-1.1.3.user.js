@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         BiliBili 关注管理
 // @namespace    https://github.com/YisRime/TamperMonkeyScript
-// @version      1.1.2
+// @version      1.1.3
 // @description  B站关注管理，支持批量取关、分组管理、信息同步、主页 IP 属地检测、老粉计划检测（主页自动采集，避免接口风控）等功能，适用于批量管理关注列表。
 // @author       苡淞
 // @match        https://space.bilibili.com/*/relation/follow*
@@ -566,7 +566,10 @@
                     list.forEach(r => {
                         const u = this.parse(r), old = map.get(u.uid);
                         if (old) {
-                            u.fans = old.fans || 0; u.videoTime = old.videoTime || 0; u.dynamicTime = old.dynamicTime || 0;
+                            // fans 用本次同步的新值（followings 自带 follower）；只有取不到时才回退旧值。
+                            // 老粉计划按粉丝数预筛（<1000），粉丝数过期会误判，所以不能盲目用旧值覆盖。
+                            if (!u.fans) u.fans = old.fans || 0;
+                            u.videoTime = old.videoTime || 0; u.dynamicTime = old.dynamicTime || 0;
                             u.ip = old.ip ?? ''; u.ipChecked = !!old.ipChecked; u.ipAt = old.ipAt || 0;
                             u.oldFan = !!old.oldFan; u.oldFanDisplay = !!old.oldFanDisplay;
                             u.oldFanChecked = !!old.oldFanChecked; u.oldFanAt = old.oldFanAt || 0;

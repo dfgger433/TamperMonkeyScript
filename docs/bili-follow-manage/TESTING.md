@@ -1,6 +1,6 @@
 # 测试指南 · IP 属地 / 老粉计划检测
 
-> 阶段 1 + 阶段 2 已在本机执行：语法 / 单测（71 项）/ 构建 / 真实探针（6 项）均通过；手动验收待用户在浏览器执行，见 `MANUAL-TEST.md`。
+> 阶段 1 + 阶段 2 已在本机执行：语法 / 单测（73 项）/ 构建 / 真实探针（6 项）均通过；手动验收待用户在浏览器执行，见 `MANUAL-TEST.md`。
 > 真实站点数据必须由已登录用户验证——仓库与 CI 没有 B 站 Cookie，也没有 `access_key`。
 
 ## 1. 状态（2026-11-02/03）
@@ -8,8 +8,8 @@
 | 项目 | 命令 | 结果 |
 | --- | --- | --- |
 | 语法 | `node --check BilibiliFollowManage.js` | ✅ 通过（`dist` 产物同样通过） |
-| 单测 | `npm run test:follow` | ✅ 71/71 通过（约 1.5 s） |
-| 构建 | `npm run build:follow` | ✅ 产出 85442 字节（1.1.2），仅多两行发布地址 |
+| 单测 | `npm run test:follow` | ✅ 73/73 通过（约 1.5 s） |
+| 构建 | `npm run build:follow` | ✅ 产出 85754 字节（1.1.3），仅多两行发布地址 |
 | 探针 A–F | §4 | ✅ 6/6 通过（`node scripts/probe-app-api.mjs`） |
 | 手动验收 | `MANUAL-TEST.md` | ⏳ 待用户执行 |
 
@@ -40,9 +40,9 @@ Get-Content $out -TotalCount 16
 Compare-Object (Get-Content 'BilibiliFollowManage.js') (Get-Content $out)
 ```
 
-预期：产物存在；头部 `@version` 为 `1.1.2`；`Compare-Object` 只有 `@downloadURL`、`@updateURL` 两条 `=>`。
+预期：产物存在；头部 `@version` 为 `1.1.3`；`Compare-Object` 只有 `@downloadURL`、`@updateURL` 两条 `=>`。
 
-单测覆盖（`test/follow-manage/`，71 项）：
+单测覆盖（`test/follow-manage/`，73 项）：
 
 | 文件 | 用例 | 关键断言 |
 | --- | --- | --- |
@@ -52,7 +52,7 @@ Compare-Object (Get-Content 'BilibiliFollowManage.js') (Get-Content $out)
 | `detect-ip.test.mjs`（19） | 批量写入/落库、`-352`/`-799` 重试、`-101` 中止、`-404` 记无 IP、网络错误不写、缺 `card` 记失败、选中优先、拒绝授权、unknown 授权门、批次内 key 变更、**点真实按钮**回归、`act` 路由、`parse` 补字段、**授权期间同步替换列表**、**双击不并发两轮**、**整批 0 属地告警**、**canary -101 中止**、空库不抛错 | 点按钮绝不能走关注/取关；每条请求必须带原 key |
 | `detect-oldfan.test.mjs`（13） | `is_follow_display` 写入/落库/标签、缺 `contract` 记失败、**`-352` 熔断不重试**、`-404` 记无、**点真实按钮**、**已采集/已检测的人不再请求**、**粉丝 ≥1000 直接判无且不发请求**、**≥1000 已有结果不覆盖**、**主页采集缓存自动合并且不发请求**、**`applyOldFanCache` 落库**、**空间页 fetch 钩子写缓存（不消费原响应）**、**面板打开时实时更新标签**、wbi 签名与空 token | 风控后不写出假数据；缓存命中零请求；≥1000 粉丝不发请求；钩子捕获 `contract` 写入 `BiliFollowManageOldFanCache` |
 | `access-key.test.mjs`（14） | 解析裸串/JSON/片段、校验（location/`-101`/正常/unknown）、手动粘贴成功/失败/unknown 确认与拒绝、TV 授权成功/失败/unknown 拒绝、清除、已授权不弹窗 | 假 key 不会被判为有效；unknown 不静默放行；confirm 带 csrf 且不手写 Cookie 头 |
-| `sync.test.mjs`（9） | 同步保留 `ip`/`oldFan` 字段、不串旧数据、`attribute=6`/`face`、导入旧备份保留两种结果、新备份覆盖、新用户追加 | 旧备份缺字段时必须保留本机结果 |
+| `sync.test.mjs`（11） | 同步保留 `ip`/`oldFan` 字段、不串旧数据、`attribute=6`/`face`、导入旧备份保留两种结果、新备份覆盖、新用户追加 | 旧备份缺字段时必须保留本机结果 |
 
 桩要求：jsdom 启动脚本；`GM_addStyle` 空实现；`GM_xmlhttpRequest` 可控返回；`indexedDB` 用内存实现；`alert/confirm/prompt` 记录调用；`setTimeout` 立即执行（避免真实等待 800 ms）。
 
@@ -137,7 +137,7 @@ node scripts/probe-app-api.mjs
 | `indexedDB is not defined` | jsdom 桩缺失 | 在 setup 注入内存版 `indexedDB` |
 | 测试卡住 | `setTimeout` 真实等待 | 用假定时器立即执行 |
 | `GM_xmlhttpRequest is not defined` | 启动脚本未注入 | 在 `before` 里挂到 `globalThis` |
-| 构建找不到版本 | 头部正则不匹配 | 确认 `@version      1.1.2` 仍在首 15 行 |
+| 构建找不到版本 | 头部正则不匹配 | 确认 `@version      1.1.3` 仍在首 15 行 |
 | 产物多出差异 | 构建重复注入/换行 | 检查 `@downloadURL` 是否只出现一次 |
 | 探针非 0 | 时钟偏差/签名排序/UA/风控 | 校时；打印 `$s` 与 `$sign` 比对 |
 

@@ -76,7 +76,7 @@
 - `access_token` 等同于账号凭据，只存本机 `localStorage`，不打印、不上传。
 - `auth_code` 有时效，过期需从第 1 步重新开始（本脚本每次都新建）。
 
-## 6. 老粉计划字段（阶段 2；1.1.2 改为主页采集）
+## 6. 老粉计划字段（阶段 2；1.1.3 改为主页采集）
 
 请求（网页接口，复用现有 `encWbi`）：
 
@@ -90,8 +90,9 @@ GET https://api.bilibili.com/x/space/wbi/acc/info?mid=<mid>&platform=web&web_loc
 - 该接口匿名通常 `-352/-403`（风控），需要浏览器登录态；这也是它不能进 CI 的原因。
 - **2026-11-03 复测（用户反馈「老粉计划会触发风控」后）**：用真实 wbi 签名 + 浏览器 UA + `Referer` + `Origin` + `buvid3/buvid4/b_nut` + `x-bili-trace-id` 请求，仍返回 `-352 风控校验失败` 且带 `v_voucher`。说明不是请求头缺失，而是该接口对脚本请求启用 gaia 校验；**批量直连不可行**。
 - 参考脚本的可靠做法：**不自己发请求**，用 `@run-at document-start` + `unsafeWindow` 钩住空间页自己的 `acc/info`（fetch/XHR）响应；它的 `fallbackFromPerformance` 也只是用页面上下文 `fetch(url,{credentials:'include'})` 重放页面已发出的 URL。
-- 因此 1.1.2 改为「主页采集」：空间页钩子把 `contract` 写进 `localStorage` 的 `BiliFollowManageOldFanCache`，关注页面板合并。批量请求只作兜底（页面上下文 fetch、串行 ≥2.5s、`-352` 立即熔断不重试）。
-- **粉丝数规则（用户实测反馈，2026-11-03）**：老粉计划只在目标用户**粉丝 < 1000** 时显示，≥1000 不显示。1.1.2 据此预筛：`fans >= 1000` 且还没有检测结果的人直接标「已检测·不显示」并**不发请求**；已有结果的人不覆盖。阈值在脚本里是常量 `OLD_FAN_MAX_FANS`。
+- 因此 1.1.3 改为「主页采集」：空间页钩子把 `contract` 写进 `localStorage` 的 `BiliFollowManageOldFanCache`，关注页面板合并。批量请求只作兜底（页面上下文 fetch、串行 ≥2.5s、`-352` 立即熔断不重试）。
+- **粉丝数规则（用户确认，2026-11-03）**：老粉计划只在目标用户**自己的粉丝数 < 1000** 时显示，≥1000 不显示。1.1.2 据此预筛：`fans >= 1000` 且还没有检测结果的人直接标「已检测·不显示」并**不发请求**；已有结果的人不覆盖。阈值在脚本里是常量 `OLD_FAN_MAX_FANS`。
+- 1.1.3 修正粉丝数来源：`syncData()` 原实现用旧缓存覆盖同步到的 `follower`（`u.fans = old.fans || 0`），粉丝数会长期停在旧值，导致预筛误判。现改为优先用接口值，接口没给才回退旧值。
 - 实现补充：`getWbi()` 不能因 nav 返回 `-101`（未登录）就丢弃 `wbi_img`——wbi key 与登录无关，否则未登录环境下老粉计划检测会全部失败。现改用 `reqRaw` 只解析 JSON、不看 `code`。
 
 命名冲突：现有状态下拉 `contract`（基线 252 行）读的是 `contract_info.is_contract`（基线 445 行），标签写「原始粉丝」（基线 562 行），**不是**老粉计划。阶段 2 必须用新值 `oldfan`，不要复用 `contract`。
